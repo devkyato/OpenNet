@@ -44,6 +44,8 @@ represent as one honest number.
   matter more than a compact persistent channel.
 - Choose **raw TCP** when you are prepared to design, test, and maintain every
   application framing and typing rule.
+- Choose **UDP** when datagram semantics and application-controlled loss behavior
+  are requirements; raw UDP cannot be passed directly to ONP/1.
 - Choose **OpenNet** for direct, dependency-light typed messages shared by ESP32
   and Python code, with a small API and documented frame format.
 

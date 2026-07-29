@@ -7,6 +7,11 @@ than a broker protocol: peers establish a reliable byte stream (normally TCP or
 TLS), exchange frames, and decide at the application layer which topics are
 allowed.
 
+A transport must preserve every byte in order for the lifetime of the
+connection. Datagram loss, reordering, fragmentation, and session semantics are
+outside ONP/1. An adapter for a datagram transport must satisfy the stream
+contract before passing bytes to this protocol.
+
 ## Byte order and limits
 
 All multibyte integers and floating-point values use network byte order (big

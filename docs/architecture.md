@@ -5,6 +5,8 @@ must provide a reliable, ordered stream; Wi-Fi itself is not required.
 
 I made that separation deliberately. A transport should only have to move bytes;
 it should not get to redefine what a topic, type, ACK, or message ID means.
+The tradeoff is equally deliberate: ONP/1 does not make an unreliable datagram
+transport reliable. That responsibility belongs in an adapter below the codec.
 
 ```mermaid
 flowchart LR

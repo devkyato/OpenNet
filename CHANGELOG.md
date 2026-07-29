@@ -20,6 +20,8 @@ All notable changes are documented here. OpenNet follows
 
 - Release verification now includes the native Arduino tests and ESP32 build.
 - Current install examples and package metadata target v0.2.0.
+- Project positioning now emphasizes direct embedded-to-host communication, and
+  the reliable-stream boundary explicitly documents why raw UDP is unsupported.
 
 ### Compatibility
 
