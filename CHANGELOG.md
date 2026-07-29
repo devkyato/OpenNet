@@ -51,6 +51,8 @@ All notable changes are documented here. OpenNet follows
 - The CLI rejects oversized files before reading them, logs payload metadata
   rather than values by default, offers a shared topic-prefix allowlist, and
   labels its benchmark as sequential acknowledged round trips.
+- A Python server at its connection limit now sends a best-effort ERROR before
+  closing the rejected connection.
 
 ### Compatibility
 

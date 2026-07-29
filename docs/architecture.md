@@ -85,6 +85,10 @@ Handler exceptions and timeouts increment counters without retracting an ACK
 that has already reported transport acceptance. If the handler set is full, the
 server sends a generic `handler queue full` ERROR and closes.
 
+The connection set is bounded separately. A connection arriving at that limit
+receives a best-effort ERROR before the server closes it, subject to the same
+bounded write timeout as other control frames.
+
 Server defaults also bound idle waits, incomplete headers, incomplete bodies
 with a payload-size allowance, TLS handshakes, writes, and handler duration.
 These values are configurable because a serial bridge and a local TCP service

@@ -218,6 +218,20 @@ class OpenNetServer:
     ) -> None:
         if len(self._peers) >= self.max_connections:
             self.stats.rejected_connections += 1
+            reason = b"server connection limit reached"[: self.max_payload]
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(
+                    write_frame(
+                        writer,
+                        Frame(
+                            FrameKind.ERROR,
+                            ValueType.UTF8,
+                            payload=reason,
+                        ),
+                        self.max_payload,
+                    ),
+                    timeout=self.write_timeout,
+                )
             writer.close()
             with contextlib.suppress(Exception):
                 await writer.wait_closed()

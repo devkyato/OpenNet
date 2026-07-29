@@ -399,6 +399,37 @@ async def test_server_handler_overload_sends_error_and_closes():
         await server.close()
 
 
+async def test_server_connection_limit_sends_error_before_close():
+    server = OpenNetServer(
+        lambda _peer, _frame: None,
+        host="127.0.0.1",
+        port=0,
+        max_connections=1,
+    )
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    _first_reader, first_writer = await asyncio.open_connection("127.0.0.1", port)
+    for _ in range(100):
+        if server.stats.active_connections == 1:
+            break
+        await asyncio.sleep(0)
+    assert server.stats.active_connections == 1
+    second_reader, second_writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        response = await asyncio.wait_for(read_frame(second_reader), 1)
+        assert response.kind is FrameKind.ERROR
+        assert response.payload == b"server connection limit reached"
+        assert await asyncio.wait_for(second_reader.read(), 1) == b""
+        assert server.stats.rejected_connections == 1
+        assert server.stats.active_connections == 1
+    finally:
+        first_writer.close()
+        second_writer.close()
+        await first_writer.wait_closed()
+        await second_writer.wait_closed()
+        await server.close()
+
+
 @pytest.mark.parametrize("partial_frame", (b"", b"O"))
 async def test_server_times_out_idle_or_partial_header(partial_frame):
     server = OpenNetServer(
