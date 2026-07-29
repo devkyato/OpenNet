@@ -1,0 +1,10 @@
+OpenNetClient	KEYWORD1
+OpenNetMessage	KEYWORD1
+OpenNetValueType	KEYWORD1
+connect	KEYWORD2
+poll	KEYWORD2
+send	KEYWORD2
+sendText	KEYWORD2
+sendJson	KEYWORD2
+sendBinary	KEYWORD2
+connected	KEYWORD2
