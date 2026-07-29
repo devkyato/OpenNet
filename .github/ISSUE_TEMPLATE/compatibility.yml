@@ -1,0 +1,25 @@
+name: Hardware compatibility report
+description: Contribute a reproducible device test result
+title: "[Compatibility]: "
+labels: ["compatibility"]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Exact device and revision
+    validations:
+      required: true
+  - type: textarea
+    id: software
+    attributes:
+      label: Software versions
+      description: OS, Python, Arduino core, PlatformIO/IDE, and OpenNet commit.
+    validations:
+      required: true
+  - type: textarea
+    id: procedure
+    attributes:
+      label: Procedure and result
+      description: Network, example, duration, messages, sizes, and failures.
+    validations:
+      required: true

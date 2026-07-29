@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+      - name: Verify, test, and build
+        run: |
+          python -m pip install -e "./python[dev]" build
+          python -m pytest python
+          python -m ruff check python
+          python -m mypy python/src
+          python scripts/build_release.py --expected-version "${GITHUB_REF_NAME#v}"
+          python -m build python
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/OpenNet-*.zip
+          python/dist/*
+          --generate-notes
+          --verify-tag
+          --title "OpenNet $GITHUB_REF_NAME"
