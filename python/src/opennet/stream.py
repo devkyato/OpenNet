@@ -10,10 +10,31 @@ from .protocol import DEFAULT_MAX_PAYLOAD, HEADER_SIZE, Frame, inspect_header
 async def read_frame(
     reader: asyncio.StreamReader,
     max_payload: int = DEFAULT_MAX_PAYLOAD,
+    *,
+    idle_timeout: float | None = None,
+    header_timeout: float | None = None,
+    body_timeout: float | None = None,
+    min_body_bytes_per_second: float | None = None,
 ) -> Frame:
-    header = await reader.readexactly(HEADER_SIZE)
+    first = await asyncio.wait_for(reader.readexactly(1), timeout=idle_timeout)
+    remainder = await asyncio.wait_for(
+        reader.readexactly(HEADER_SIZE - 1),
+        timeout=header_timeout,
+    )
+    header = first + remainder
     topic_length, payload_length = inspect_header(header, max_payload)
-    body = await reader.readexactly(topic_length + payload_length)
+    body_length = topic_length + payload_length
+    effective_body_timeout = body_timeout
+    if (
+        effective_body_timeout is not None
+        and min_body_bytes_per_second is not None
+        and body_length
+    ):
+        effective_body_timeout += body_length / min_body_bytes_per_second
+    body = await asyncio.wait_for(
+        reader.readexactly(body_length),
+        timeout=effective_body_timeout,
+    )
     return Frame.from_parts(header, body, max_payload)
 
 

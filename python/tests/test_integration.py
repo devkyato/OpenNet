@@ -1,5 +1,6 @@
 import asyncio
 import ssl
+import time
 from pathlib import Path
 
 import pytest
@@ -283,6 +284,168 @@ async def test_server_deduplication_window_is_bounded():
         assert delivered == [1, 2, 3, 1]
         assert server.stats.received_messages == 5
         assert server.stats.duplicate_messages == 1
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await server.close()
+
+
+async def test_server_ack_and_ping_progress_before_slow_handler_finishes():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(_peer: Peer, _frame: Frame) -> None:
+        started.set()
+        await release.wait()
+
+    server = OpenNetServer(handler, host="127.0.0.1", port=0)
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    try:
+        async with OpenNetClient(
+            "127.0.0.1",
+            port,
+            ack_timeout=0.1,
+        ) as client:
+            assert await client.send("slow/work", "value") == 1
+            await asyncio.wait_for(started.wait(), 1)
+            assert not release.is_set()
+            await client.ping(timeout=0.2)
+            release.set()
+    finally:
+        release.set()
+        await server.close()
+
+
+async def test_slow_synchronous_handler_runs_off_event_loop():
+    def handler(_peer: Peer, _frame: Frame) -> None:
+        time.sleep(0.15)
+
+    server = OpenNetServer(handler, host="127.0.0.1", port=0)
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    try:
+        async with OpenNetClient("127.0.0.1", port) as client:
+            assert await client.send("sync/work", "value") == 1
+            await client.ping(timeout=0.1)
+    finally:
+        await server.close()
+
+
+async def test_handler_side_effect_then_exception_does_not_revoke_ack():
+    side_effect = asyncio.Event()
+
+    async def handler(_peer: Peer, _frame: Frame) -> None:
+        side_effect.set()
+        raise RuntimeError("failed after side effect")
+
+    server = OpenNetServer(handler, host="127.0.0.1", port=0)
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    try:
+        async with OpenNetClient("127.0.0.1", port) as client:
+            assert await client.send("effect/work", "value") == 1
+            await asyncio.wait_for(side_effect.wait(), 1)
+            for _ in range(20):
+                if server.stats.handler_errors == 1:
+                    break
+                await asyncio.sleep(0.01)
+            assert server.stats.handler_errors == 1
+            await client.ping(timeout=0.2)
+    finally:
+        await server.close()
+
+
+async def test_server_handler_overload_sends_error_and_closes():
+    release = asyncio.Event()
+
+    async def handler(_peer: Peer, _frame: Frame) -> None:
+        await release.wait()
+
+    server = OpenNetServer(
+        handler,
+        host="127.0.0.1",
+        port=0,
+        max_handler_tasks=1,
+    )
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        await write_frame(
+            writer,
+            Frame(
+                FrameKind.DATA,
+                topic="work/one",
+                message_id=1,
+                flags=Flags.ACK_REQUIRED,
+            ),
+            1024,
+        )
+        assert (await asyncio.wait_for(read_frame(reader), 1)).kind is FrameKind.ACK
+        await write_frame(
+            writer,
+            Frame(FrameKind.DATA, topic="work/two", message_id=2),
+            1024,
+        )
+        response = await asyncio.wait_for(read_frame(reader), 1)
+        assert response.kind is FrameKind.ERROR
+        assert response.payload == b"handler queue full"
+        assert server.stats.overloaded_messages == 1
+    finally:
+        release.set()
+        writer.close()
+        await writer.wait_closed()
+        await server.close()
+
+
+@pytest.mark.parametrize("partial_frame", (b"", b"O"))
+async def test_server_times_out_idle_or_partial_header(partial_frame):
+    server = OpenNetServer(
+        lambda _peer, _frame: None,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout=0.05,
+        header_timeout=0.05,
+    )
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        if partial_frame:
+            writer.write(partial_frame)
+            await writer.drain()
+        assert await asyncio.wait_for(reader.read(), 1) == b""
+        assert server.stats.timed_out_connections == 1
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await server.close()
+
+
+async def test_server_times_out_partial_body():
+    server = OpenNetServer(
+        lambda _peer, _frame: None,
+        host="127.0.0.1",
+        port=0,
+        body_timeout=0.05,
+        min_body_bytes_per_second=1_000_000,
+    )
+    await server.start()
+    port = server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    encoded = Frame(
+        FrameKind.DATA,
+        ValueType.UTF8,
+        topic="slow/body",
+        payload=b"value",
+        message_id=1,
+    ).to_bytes()
+    try:
+        writer.write(encoded[:24])
+        await writer.drain()
+        assert await asyncio.wait_for(reader.read(), 1) == b""
+        assert server.stats.timed_out_connections == 1
     finally:
         writer.close()
         await writer.wait_closed()

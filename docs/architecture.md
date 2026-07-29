@@ -72,6 +72,18 @@ PING uses dedicated PONG waiters, so DATA received before a PONG remains in the
 application queue rather than being repeatedly re-read. Outbound writes have a
 configurable timeout, and message-ID allocation skips IDs still waiting for ACK.
 
+The Python server admits new authorized DATA into a bounded per-connection
+handler set, sends any requested ACK, and then dispatches the handler. Async
+handlers run as bounded tasks; synchronous handlers run off the event loop.
+Handler exceptions and timeouts increment counters without retracting an ACK
+that has already reported transport acceptance. If the handler set is full, the
+server sends a generic `handler queue full` ERROR and closes.
+
+Server defaults also bound idle waits, incomplete headers, incomplete bodies
+with a payload-size allowance, TLS handshakes, writes, and handler duration.
+These values are configurable because a serial bridge and a local TCP service
+can have very different safe timing envelopes.
+
 ## Authorization path
 
 The optional Python authorizer runs after frame validation and before duplicate

@@ -36,6 +36,11 @@ All notable changes are documented here. OpenNet follows
 - Python message-ID wrap skips IDs with pending ACK futures.
 - Python JSON decoding rejects non-standard `NaN` and infinity constants.
 - Python client writes now have a configurable timeout.
+- Python servers ACK accepted DATA before bounded handler dispatch, so slow
+  handlers no longer block PING or turn completed side effects into ACK timeout
+  ambiguity.
+- Python servers bound idle/header/body/TLS/write/handler waits and reject a full
+  handler set explicitly.
 
 ### Compatibility
 
