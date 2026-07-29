@@ -55,6 +55,9 @@ All notable changes are documented here. OpenNet follows
   closing the rejected connection.
 - GitHub Actions dependencies are pinned to immutable upstream commits with
   readable release-version comments.
+- Deterministic fault tests cover concurrent sends, every truncation point of a
+  valid frame, fragmented ACK delivery, and a reproducible 24-byte-header
+  mutation corpus.
 
 ### Compatibility
 
