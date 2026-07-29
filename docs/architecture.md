@@ -42,9 +42,23 @@ sequenceDiagram
 ```
 
 Python retries reuse the message ID, and the server suppresses duplicate handler
-execution within a configurable bounded window. An ACK proves that the peer
-parsed and accepted the frame; it does not make delivery durable across power
-loss. Durable applications must persist outbound messages and application state.
+execution within a configurable bounded window. The server ACKs after validation,
+authorization, and duplicate admission, before it dispatches the application
+handler. An ACK therefore proves transport acceptance, not handler success or
+durability across power loss. Durable applications must persist outbound
+messages, operation IDs, and application state.
+
+## Delivery terms
+
+- **Accepted at most once in a retained live-connection window:** retrying one
+  message ID does not run its handler twice while that ID remains in the bounded
+  window.
+- **Not exactly once across reconnects:** message IDs are connection-local and
+  the in-memory window is lost when the connection ends.
+- **Potentially at least once across uncertain failure:** an application that
+  replays after reconnect may cause the same logical operation again.
+- **Application idempotency is required:** durable operation IDs and persisted
+  results are needed when repeating an action would be unsafe.
 
 ## Authorization path
 
@@ -59,8 +73,8 @@ flowchart LR
     B -->|Yes| C{"Allowed?"}
     C -->|No| E["Generic ERROR and close"]
     C -->|Yes| D
-    D --> F["Application handler"]
-    F --> G["ACK when requested"]
+    D --> F["ACK when requested"]
+    F --> G["Bounded handler dispatch"]
 ```
 
 The policy can inspect `Peer.tls_enabled`, `Peer.tls_peer_certificate`, and the

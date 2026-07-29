@@ -24,6 +24,9 @@ All notable changes are documented here. OpenNet follows
   the reliable-stream boundary explicitly documents why raw UDP is unsupported.
 - Arduino receive handling now moves the validated body buffer into the callback
   message instead of allocating and copying a second payload vector.
+- ACK semantics now explicitly mean validated transport acceptance before
+  handler completion; delivery guarantees and timeout/overload policies are
+  documented without changing ONP/1 bytes.
 
 ### Compatibility
 

@@ -127,6 +127,11 @@ Measured loopback results are software baselines, not invented Wi-Fi or hardware
 claims. Hardware field reports are welcome through the
 [compatibility process](docs/compatibility.md).
 
+ACKs mean validated transport acceptance, not successful application side
+effects. Duplicate suppression is bounded and connection-local; applications
+must use durable operation IDs when replay after reconnect could repeat an
+unsafe action.
+
 ## Learn and build
 
 - [Tutorials](docs/tutorials.md)

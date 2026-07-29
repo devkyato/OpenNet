@@ -51,6 +51,8 @@ example is in [Authorizing topics](authorization.md).
 - Persist operation IDs when duplicate physical actions would be dangerous.
 - Rate-limit expensive handlers and monitor `ServerStats`.
 - Keep payload and connection limits appropriate for available RAM and CPU.
+- Configure idle, incomplete-frame, TLS-handshake, and write timeouts for the
+  deployment rather than allowing slots to remain occupied indefinitely.
 
 ## Current limits
 

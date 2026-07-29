@@ -51,7 +51,10 @@ as an optional hierarchy separator.
 | 5 | CLOSE | optional UTF-8 reason |
 | 6 | ERROR | UTF-8 diagnostic; must not contain secrets |
 
-Unknown frame kinds must produce ERROR and close the connection. A peer receiving
+When a receiver can safely trust the frame boundary, an unsupported frame kind
+should produce ERROR and close the connection. A receiver may close immediately
+when the magic, version, kind, lengths, or other framing fields are invalid
+enough that continuing or writing a response would be unsafe. A peer receiving
 PING should promptly return PONG.
 
 ## Flags
@@ -60,9 +63,16 @@ PING should promptly return PONG.
 - Bit 1 (`0x02`), `DUPLICATE`: retransmission of the same message ID.
 - Bits 2–7 are reserved and must be zero when sending.
 
-ACK confirms that the receiver parsed and accepted the frame, not that application
-side effects completed. Message IDs are scoped to one connection. Receivers should
-deduplicate repeated IDs for the duration of the connection.
+ACK confirms transport-level acceptance. For DATA, acceptance means that the
+receiver validated the complete frame, applied configured limits and
+authorization, and admitted the message ID to its bounded duplicate window. The
+ACK is sent before application handler completion. It does not prove that a
+handler started, succeeded, persisted data, or completed a physical side effect.
+
+Message IDs are scoped to one connection. Receivers should deduplicate repeated
+IDs for the duration of the connection. A repeated accepted ID receives an ACK
+with `DUPLICATE`; its handler is not run again inside the retained live-connection
+window.
 
 ## Value types
 
@@ -98,6 +108,12 @@ confidentiality, peer authentication, and tamper resistance.
 4. Send CLOSE when practical before ending a healthy connection.
 5. Reconnect with exponential backoff and jitter. Application code decides whether
    to replay unacknowledged messages.
+
+Implementations should bound idle time, incomplete-header time, incomplete-body
+time, TLS handshake time, and writes. These are local transport policies rather
+than ONP/1 fields. When an application receive queue or handler dispatcher is
+full, a receiver must apply an explicit bounded policy; it must not allow DATA
+backpressure to prevent ACK, PING, PONG, CLOSE, or ERROR processing indefinitely.
 
 ## Compatibility
 
