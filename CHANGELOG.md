@@ -43,6 +43,11 @@ All notable changes are documented here. OpenNet follows
   handler set explicitly.
 - Python and Arduino now share malformed UTF-8/JSON conformance vectors, enforce
   strict text/control encoding, and bound JSON nesting to 32.
+- Arduino polling has a configurable byte budget, partial writes have a deadline
+  and cooperative yield, generic sends enforce typed invariants, and ACK tracking
+  uses bounded pending/history tables.
+- Arduino applications can provide a fixed receive buffer and function-pointer
+  message view to avoid OpenNet receive-path heap allocation.
 
 ### Compatibility
 

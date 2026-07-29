@@ -23,6 +23,12 @@ server. The Arduino implementation accepts either a `Client` (`WiFiClient`,
 `WiFiClientSecure`) or an already-open Arduino `Stream` (`Serial`,
 `BluetoothSerial`). The frame bytes are identical across transports.
 
+Arduino `poll()` has a configurable byte budget, partial writes have a total
+deadline and cooperative yields, and ACK-required sends use an eight-entry
+pending table. A caller-owned receive buffer plus `onMessageView` provides a
+no-allocation OpenNet receive path for firmware that does not use the legacy
+`String`/vector callback.
+
 BLE GATT is packet-oriented, not a continuous byte stream. It needs an adapter
 that fragments and reassembles ONP frames; v0.2.0 does not claim direct BLE
 support. ESP32-C3/S3 boards also do not provide Bluetooth Classic SPP.

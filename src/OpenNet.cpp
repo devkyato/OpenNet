@@ -311,6 +311,40 @@ bool validJson(const uint8_t* data, size_t length) {
   return validUtf8(data, length) && JsonValidator(data, length).validate();
 }
 
+bool validTypedPayload(OpenNetValueType type, const uint8_t* payload,
+                       size_t length) {
+  if (payload == nullptr && length != 0) {
+    return false;
+  }
+  switch (type) {
+    case OpenNetValueType::Bytes:
+      return true;
+    case OpenNetValueType::Utf8:
+      return validUtf8(payload, length);
+    case OpenNetValueType::Json:
+      return validJson(payload, length);
+    case OpenNetValueType::Int64:
+      return length == 8;
+    case OpenNetValueType::Float64: {
+      if (length != 8) {
+        return false;
+      }
+      uint64_t bits = 0;
+      for (size_t index = 0; index < 8; ++index) {
+        bits = (bits << 8) | payload[index];
+      }
+      double value = 0;
+      memcpy(&value, &bits, sizeof(value));
+      return std::isfinite(value);
+    }
+    case OpenNetValueType::Bool:
+      return length == 1 && payload[0] <= 1;
+    case OpenNetValueType::Null:
+      return length == 0;
+  }
+  return false;
+}
+
 }  // namespace
 
 String OpenNetMessage::text() const {
@@ -363,20 +397,48 @@ bool OpenNetMessage::isNull() const {
   return valueType == OpenNetValueType::Null && payload.empty();
 }
 
-OpenNetClient::OpenNetClient(Stream& transport, uint32_t maxPayload)
+OpenNetClient::OpenNetClient(Stream& transport, uint32_t maxPayload,
+                             uint32_t writeTimeoutMs)
     : transport_(transport),
       clientTransport_(nullptr),
       maxPayload_(maxPayload),
+      writeTimeoutMs_(writeTimeoutMs),
       nextMessageId_(1),
       lastAcknowledged_(0),
+      pendingAcks_{},
+      pendingAckCount_(0),
+      acknowledgedIds_{},
+      acknowledgedCount_(0),
       lastError_(OpenNetError::None),
+      viewHandler_(nullptr),
+      viewContext_(nullptr),
       headerReceived_(0),
+      receiveBuffer_(nullptr),
+      receiveCapacity_(0),
       bodyReceived_(0),
       expectedTopicLength_(0),
       expectedPayloadLength_(0) {}
 
-OpenNetClient::OpenNetClient(Client& transport, uint32_t maxPayload)
-    : OpenNetClient(static_cast<Stream&>(transport), maxPayload) {
+OpenNetClient::OpenNetClient(Client& transport, uint32_t maxPayload,
+                             uint32_t writeTimeoutMs)
+    : OpenNetClient(static_cast<Stream&>(transport), maxPayload,
+                    writeTimeoutMs) {
+  clientTransport_ = &transport;
+}
+
+OpenNetClient::OpenNetClient(Stream& transport, uint8_t* receiveBuffer,
+                             size_t receiveCapacity, uint32_t maxPayload,
+                             uint32_t writeTimeoutMs)
+    : OpenNetClient(transport, maxPayload, writeTimeoutMs) {
+  receiveBuffer_ = receiveBuffer;
+  receiveCapacity_ = receiveCapacity;
+}
+
+OpenNetClient::OpenNetClient(Client& transport, uint8_t* receiveBuffer,
+                             size_t receiveCapacity, uint32_t maxPayload,
+                             uint32_t writeTimeoutMs)
+    : OpenNetClient(static_cast<Stream&>(transport), receiveBuffer,
+                    receiveCapacity, maxPayload, writeTimeoutMs) {
   clientTransport_ = &transport;
 }
 
@@ -387,6 +449,7 @@ bool OpenNetClient::connect(const char* host, uint16_t port) {
     return false;
   }
   resetReceiver();
+  resetAcknowledgements();
   if (!clientTransport_->connect(host, port)) {
     lastError_ = OpenNetError::NotConnected;
     return false;
@@ -404,23 +467,26 @@ void OpenNetClient::disconnect(const char* reason) {
   }
   stopTransport();
   resetReceiver();
+  resetAcknowledgements();
 }
 
 bool OpenNetClient::connected() const {
   return clientTransport_ == nullptr || clientTransport_->connected();
 }
 
-void OpenNetClient::poll() {
+void OpenNetClient::poll(size_t maxBytes) {
   if (!connected()) {
     return;
   }
 
-  while (transport_.available() > 0) {
+  size_t processed = 0;
+  while (transport_.available() > 0 && processed < maxBytes) {
     if (headerReceived_ < kHeaderSize) {
       const int byte = transport_.read();
       if (byte < 0) {
         return;
       }
+      ++processed;
       header_[headerReceived_++] = static_cast<uint8_t>(byte);
       if (headerReceived_ == kHeaderSize && !prepareBody()) {
         stopTransport();
@@ -430,12 +496,14 @@ void OpenNetClient::poll() {
     } else {
       const size_t total =
           static_cast<size_t>(expectedTopicLength_) + expectedPayloadLength_;
-      while (bodyReceived_ < total && transport_.available() > 0) {
+      while (bodyReceived_ < total && transport_.available() > 0 &&
+             processed < maxBytes) {
         const int byte = transport_.read();
         if (byte < 0) {
           return;
         }
-        body_[bodyReceived_++] = static_cast<uint8_t>(byte);
+        ++processed;
+        bodyData()[bodyReceived_++] = static_cast<uint8_t>(byte);
       }
       if (bodyReceived_ == total) {
         handleFrame();
@@ -449,6 +517,11 @@ void OpenNetClient::onMessage(MessageHandler handler) {
   handler_ = std::move(handler);
 }
 
+void OpenNetClient::onMessageView(MessageViewHandler handler, void* context) {
+  viewHandler_ = handler;
+  viewContext_ = context;
+}
+
 OpenNetError OpenNetClient::lastError() const { return lastError_; }
 
 uint32_t OpenNetClient::lastAcknowledgedMessage() const {
@@ -456,7 +529,15 @@ uint32_t OpenNetClient::lastAcknowledgedMessage() const {
 }
 
 bool OpenNetClient::acknowledged(uint32_t messageId) const {
-  return messageId != 0 && lastAcknowledged_ == messageId;
+  if (messageId == 0) {
+    return false;
+  }
+  for (size_t index = 0; index < acknowledgedCount_; ++index) {
+    if (acknowledgedIds_[index] == messageId) {
+      return true;
+    }
+  }
+  return false;
 }
 
 uint32_t OpenNetClient::send(const char* topic, OpenNetValueType type,
@@ -471,10 +552,21 @@ uint32_t OpenNetClient::send(const char* topic, OpenNetValueType type,
     lastError_ = OpenNetError::InvalidArgument;
     return 0;
   }
-  const uint32_t id = nextMessageId_;
+  if (requireAck && pendingAckCount_ >= kAckWindowSize) {
+    lastError_ = OpenNetError::TooManyPendingAcks;
+    return 0;
+  }
+  uint32_t id = nextMessageId_;
+  while (isPendingAck(id)) {
+    id = id == UINT32_MAX ? 1 : id + 1;
+  }
   nextMessageId_ = id == UINT32_MAX ? 1 : id + 1;
   if (!sendFrame(OpenNetFrameKind::Data, type, topic, payload, length, id,
                  requireAck ? kAckRequired : 0)) {
+    return 0;
+  }
+  if (requireAck && !rememberPendingAck(id)) {
+    lastError_ = OpenNetError::TooManyPendingAcks;
     return 0;
   }
   return id;
@@ -556,8 +648,47 @@ bool OpenNetClient::sendFrame(OpenNetFrameKind kind, OpenNetValueType type,
     lastError_ = OpenNetError::TopicTooLong;
     return false;
   }
+  if (!validUtf8(reinterpret_cast<const uint8_t*>(safeTopic), topicLength)) {
+    lastError_ = OpenNetError::InvalidArgument;
+    return false;
+  }
   if (length > maxPayload_ || length > UINT32_MAX) {
     lastError_ = OpenNetError::PayloadTooLarge;
+    return false;
+  }
+  if ((flags & ~kAllowedFlags) != 0) {
+    lastError_ = OpenNetError::InvalidArgument;
+    return false;
+  }
+  if (kind == OpenNetFrameKind::Data) {
+    if (topicLength == 0 || messageId == 0 ||
+        !validTypedPayload(type, payload, length)) {
+      lastError_ = OpenNetError::InvalidArgument;
+      return false;
+    }
+  } else if (kind == OpenNetFrameKind::Ack) {
+    if (topicLength != 0 || messageId == 0 || length != 0 ||
+        type != OpenNetValueType::Null) {
+      lastError_ = OpenNetError::InvalidArgument;
+      return false;
+    }
+  } else if (kind == OpenNetFrameKind::Ping ||
+             kind == OpenNetFrameKind::Pong) {
+    if (topicLength != 0 || messageId != 0 || length != 0 ||
+        type != OpenNetValueType::Null || flags != 0) {
+      lastError_ = OpenNetError::InvalidArgument;
+      return false;
+    }
+  } else if (kind == OpenNetFrameKind::Close ||
+             kind == OpenNetFrameKind::Error) {
+    if (topicLength != 0 || messageId != 0 || flags != 0 ||
+        (length != 0 && type != OpenNetValueType::Utf8) ||
+        !validUtf8(payload, length)) {
+      lastError_ = OpenNetError::InvalidArgument;
+      return false;
+    }
+  } else {
+    lastError_ = OpenNetError::InvalidArgument;
     return false;
   }
 
@@ -579,7 +710,9 @@ bool OpenNetClient::sendFrame(OpenNetFrameKind kind, OpenNetValueType type,
   if (!writeAll(header, kHeaderSize) ||
       !writeAll(reinterpret_cast<const uint8_t*>(safeTopic), topicLength) ||
       !writeAll(payload, length)) {
-    lastError_ = OpenNetError::TransportWrite;
+    if (lastError_ != OpenNetError::WriteTimeout) {
+      lastError_ = OpenNetError::TransportWrite;
+    }
     return false;
   }
   lastError_ = OpenNetError::None;
@@ -588,12 +721,21 @@ bool OpenNetClient::sendFrame(OpenNetFrameKind kind, OpenNetValueType type,
 
 bool OpenNetClient::writeAll(const uint8_t* data, size_t length) {
   size_t offset = 0;
+  const uint32_t started = millis();
   while (offset < length) {
+    if (offset > 0 &&
+        static_cast<uint32_t>(millis() - started) >= writeTimeoutMs_) {
+      lastError_ = OpenNetError::WriteTimeout;
+      return false;
+    }
     const size_t written = transport_.write(data + offset, length - offset);
     if (written == 0 || written > length - offset) {
       return false;
     }
     offset += written;
+    if (offset < length) {
+      yield();
+    }
   }
   return true;
 }
@@ -606,7 +748,7 @@ void OpenNetClient::stopTransport() {
 
 void OpenNetClient::resetReceiver() {
   headerReceived_ = 0;
-  body_.clear();
+  clearBody();
   bodyReceived_ = 0;
   expectedTopicLength_ = 0;
   expectedPayloadLength_ = 0;
@@ -667,9 +809,13 @@ bool OpenNetClient::prepareBody() {
     lastError_ = OpenNetError::PayloadTooLarge;
     return false;
   }
-  body_.resize(static_cast<size_t>(expectedTopicLength_) +
-               expectedPayloadLength_);
-  if (body_.empty()) {
+  const size_t bodyLength =
+      static_cast<size_t>(expectedTopicLength_) + expectedPayloadLength_;
+  if (!reserveBody(bodyLength)) {
+    lastError_ = OpenNetError::ReceiveBufferTooSmall;
+    return false;
+  }
+  if (bodyLength == 0) {
     handleFrame();
     resetReceiver();
   }
@@ -678,9 +824,11 @@ bool OpenNetClient::prepareBody() {
 
 void OpenNetClient::handleFrame() {
   const uint32_t expectedChecksum = readU32(header_ + 16);
-  const uint8_t* topicBytes = body_.empty() ? nullptr : body_.data();
+  const size_t bodyLength =
+      static_cast<size_t>(expectedTopicLength_) + expectedPayloadLength_;
+  const uint8_t* topicBytes = bodyLength == 0 ? nullptr : bodyData();
   const uint8_t* payload =
-      body_.empty() ? nullptr : body_.data() + expectedTopicLength_;
+      bodyLength == 0 ? nullptr : bodyData() + expectedTopicLength_;
   uint32_t actualChecksum = crc32(topicBytes, expectedTopicLength_);
   actualChecksum = crc32(payload, expectedPayloadLength_, actualChecksum);
   if (actualChecksum != expectedChecksum) {
@@ -699,23 +847,22 @@ void OpenNetClient::handleFrame() {
     return;
   }
   if ((kind == OpenNetFrameKind::Close ||
-       kind == OpenNetFrameKind::Error ||
-       (kind == OpenNetFrameKind::Data &&
-        valueType == OpenNetValueType::Utf8)) &&
+       kind == OpenNetFrameKind::Error) &&
       !validUtf8(payload, expectedPayloadLength_)) {
     lastError_ = OpenNetError::InvalidFrame;
     stopTransport();
     return;
   }
   if (kind == OpenNetFrameKind::Data &&
-      valueType == OpenNetValueType::Json &&
-      !validJson(payload, expectedPayloadLength_)) {
+      !validTypedPayload(valueType, payload, expectedPayloadLength_)) {
     lastError_ = OpenNetError::InvalidFrame;
     stopTransport();
     return;
   }
   if (kind == OpenNetFrameKind::Ack) {
-    lastAcknowledged_ = messageId;
+    if (rememberAcknowledged(messageId)) {
+      lastAcknowledged_ = messageId;
+    }
     return;
   }
   if (kind == OpenNetFrameKind::Ping) {
@@ -726,45 +873,122 @@ void OpenNetClient::handleFrame() {
   if (kind != OpenNetFrameKind::Data) {
     return;
   }
-  if (valueType == OpenNetValueType::Bool &&
-      payload[0] > 1) {
-    lastError_ = OpenNetError::InvalidFrame;
-    stopTransport();
-    return;
+  if ((header_[4] & kAckRequired) != 0) {
+    sendFrame(OpenNetFrameKind::Ack, OpenNetValueType::Null, "", nullptr, 0,
+              messageId, 0);
   }
-
-  OpenNetMessage message;
-  message.kind = kind;
-  message.valueType = valueType;
-  message.messageId = messageId;
-  message.flags = header_[4];
-  message.topic.reserve(expectedTopicLength_);
-  for (size_t i = 0; i < expectedTopicLength_; ++i) {
-    message.topic += static_cast<char>(body_[i]);
-  }
-  if (expectedPayloadLength_ > 0) {
-    memmove(body_.data(), payload, expectedPayloadLength_);
-    body_.resize(expectedPayloadLength_);
-  } else {
-    body_.clear();
-  }
-  message.payload = std::move(body_);
-  if (message.valueType == OpenNetValueType::Float64) {
-    double value = 0;
-    if (!message.asDouble(value)) {
-      lastError_ = OpenNetError::InvalidFrame;
-      stopTransport();
-      return;
-    }
+  if (viewHandler_ != nullptr) {
+    const OpenNetMessageView view{
+        kind,
+        valueType,
+        topicBytes,
+        expectedTopicLength_,
+        payload,
+        expectedPayloadLength_,
+        messageId,
+        header_[4],
+    };
+    viewHandler_(view, viewContext_);
   }
   if (handler_) {
+    OpenNetMessage message;
+    message.kind = kind;
+    message.valueType = valueType;
+    message.messageId = messageId;
+    message.flags = header_[4];
+    message.topic.reserve(expectedTopicLength_);
+    for (size_t i = 0; i < expectedTopicLength_; ++i) {
+      message.topic += static_cast<char>(topicBytes[i]);
+    }
+    if (receiveBuffer_ != nullptr) {
+      if (expectedPayloadLength_ > 0) {
+        message.payload.assign(payload, payload + expectedPayloadLength_);
+      }
+    } else {
+      if (expectedPayloadLength_ > 0) {
+        memmove(body_.data(), payload, expectedPayloadLength_);
+        body_.resize(expectedPayloadLength_);
+      } else {
+        body_.clear();
+      }
+      message.payload = std::move(body_);
+    }
     handler_(message);
+    if (receiveBuffer_ == nullptr) {
+      body_ = std::move(message.payload);
+    }
   }
-  body_ = std::move(message.payload);
-  if ((message.flags & kAckRequired) != 0) {
-    sendFrame(OpenNetFrameKind::Ack, OpenNetValueType::Null, "", nullptr, 0,
-              message.messageId, 0);
+}
+
+uint8_t* OpenNetClient::bodyData() {
+  return receiveBuffer_ == nullptr ? body_.data() : receiveBuffer_;
+}
+
+const uint8_t* OpenNetClient::bodyData() const {
+  return receiveBuffer_ == nullptr ? body_.data() : receiveBuffer_;
+}
+
+bool OpenNetClient::reserveBody(size_t length) {
+  if (receiveBuffer_ != nullptr) {
+    return length <= receiveCapacity_;
   }
+  body_.resize(length);
+  return true;
+}
+
+void OpenNetClient::clearBody() {
+  if (receiveBuffer_ == nullptr) {
+    body_.clear();
+  }
+}
+
+bool OpenNetClient::isPendingAck(uint32_t messageId) const {
+  for (size_t index = 0; index < pendingAckCount_; ++index) {
+    if (pendingAcks_[index] == messageId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool OpenNetClient::rememberPendingAck(uint32_t messageId) {
+  if (pendingAckCount_ >= kAckWindowSize) {
+    return false;
+  }
+  pendingAcks_[pendingAckCount_++] = messageId;
+  return true;
+}
+
+bool OpenNetClient::rememberAcknowledged(uint32_t messageId) {
+  bool wasPending = false;
+  for (size_t index = 0; index < pendingAckCount_; ++index) {
+    if (pendingAcks_[index] == messageId) {
+      for (size_t move = index + 1; move < pendingAckCount_; ++move) {
+        pendingAcks_[move - 1] = pendingAcks_[move];
+      }
+      --pendingAckCount_;
+      wasPending = true;
+      break;
+    }
+  }
+  if (!wasPending) {
+    return false;
+  }
+  if (acknowledgedCount_ < kAckWindowSize) {
+    acknowledgedIds_[acknowledgedCount_++] = messageId;
+    return true;
+  }
+  for (size_t index = 1; index < kAckWindowSize; ++index) {
+    acknowledgedIds_[index - 1] = acknowledgedIds_[index];
+  }
+  acknowledgedIds_[kAckWindowSize - 1] = messageId;
+  return true;
+}
+
+void OpenNetClient::resetAcknowledgements() {
+  pendingAckCount_ = 0;
+  acknowledgedCount_ = 0;
+  lastAcknowledged_ = 0;
 }
 
 uint16_t OpenNetClient::readU16(const uint8_t* bytes) {
@@ -821,6 +1045,12 @@ const char* openNetErrorName(OpenNetError error) {
       return "invalid frame";
     case OpenNetError::ChecksumMismatch:
       return "checksum mismatch";
+    case OpenNetError::WriteTimeout:
+      return "write timeout";
+    case OpenNetError::TooManyPendingAcks:
+      return "too many pending acknowledgements";
+    case OpenNetError::ReceiveBufferTooSmall:
+      return "receive buffer too small";
   }
   return "unknown error";
 }

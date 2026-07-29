@@ -45,6 +45,17 @@ struct OpenNetMessage {
   bool isNull() const;
 };
 
+struct OpenNetMessageView {
+  OpenNetFrameKind kind;
+  OpenNetValueType valueType;
+  const uint8_t* topic;
+  size_t topicLength;
+  const uint8_t* payload;
+  size_t payloadLength;
+  uint32_t messageId;
+  uint8_t flags;
+};
+
 enum class OpenNetError : uint8_t {
   None,
   NotConnected,
@@ -54,6 +65,9 @@ enum class OpenNetError : uint8_t {
   TransportWrite,
   InvalidFrame,
   ChecksumMismatch,
+  WriteTimeout,
+  TooManyPendingAcks,
+  ReceiveBufferTooSmall,
 };
 
 static_assert(sizeof(OpenNetError) == sizeof(uint8_t),
@@ -62,23 +76,37 @@ static_assert(sizeof(OpenNetError) == sizeof(uint8_t),
 class OpenNetClient {
  public:
   using MessageHandler = std::function<void(const OpenNetMessage&)>;
+  using MessageViewHandler = void (*)(const OpenNetMessageView&, void*);
 
   static constexpr uint32_t kDefaultMaxPayload = 4096;
   static constexpr uint16_t kMaxTopicLength = 1024;
+  static constexpr size_t kDefaultPollBytes = 256;
+  static constexpr size_t kAckWindowSize = 8;
 
   explicit OpenNetClient(Client& transport,
-                         uint32_t maxPayload = kDefaultMaxPayload);
+                         uint32_t maxPayload = kDefaultMaxPayload,
+                         uint32_t writeTimeoutMs = 1000);
   explicit OpenNetClient(Stream& transport,
-                         uint32_t maxPayload = kDefaultMaxPayload);
+                         uint32_t maxPayload = kDefaultMaxPayload,
+                         uint32_t writeTimeoutMs = 1000);
+  OpenNetClient(Client& transport, uint8_t* receiveBuffer,
+                size_t receiveCapacity,
+                uint32_t maxPayload = kDefaultMaxPayload,
+                uint32_t writeTimeoutMs = 1000);
+  OpenNetClient(Stream& transport, uint8_t* receiveBuffer,
+                size_t receiveCapacity,
+                uint32_t maxPayload = kDefaultMaxPayload,
+                uint32_t writeTimeoutMs = 1000);
 
   // Stream transports such as Serial and BluetoothSerial are opened by their
   // caller; connect() is available for Client transports such as WiFiClient.
   bool connect(const char* host, uint16_t port);
   void disconnect(const char* reason = nullptr);
   bool connected() const;
-  void poll();
+  void poll(size_t maxBytes = kDefaultPollBytes);
 
   void onMessage(MessageHandler handler);
+  void onMessageView(MessageViewHandler handler, void* context = nullptr);
   OpenNetError lastError() const;
   uint32_t lastAcknowledgedMessage() const;
   bool acknowledged(uint32_t messageId) const;
@@ -107,14 +135,23 @@ class OpenNetClient {
   Stream& transport_;
   Client* clientTransport_;
   uint32_t maxPayload_;
+  uint32_t writeTimeoutMs_;
   uint32_t nextMessageId_;
   uint32_t lastAcknowledged_;
+  uint32_t pendingAcks_[kAckWindowSize];
+  size_t pendingAckCount_;
+  uint32_t acknowledgedIds_[kAckWindowSize];
+  size_t acknowledgedCount_;
   OpenNetError lastError_;
   MessageHandler handler_;
+  MessageViewHandler viewHandler_;
+  void* viewContext_;
 
   uint8_t header_[kHeaderSize];
   size_t headerReceived_;
   std::vector<uint8_t> body_;
+  uint8_t* receiveBuffer_;
+  size_t receiveCapacity_;
   size_t bodyReceived_;
   uint16_t expectedTopicLength_;
   uint32_t expectedPayloadLength_;
@@ -127,6 +164,14 @@ class OpenNetClient {
   void resetReceiver();
   bool prepareBody();
   void handleFrame();
+  uint8_t* bodyData();
+  const uint8_t* bodyData() const;
+  bool reserveBody(size_t length);
+  void clearBody();
+  bool isPendingAck(uint32_t messageId) const;
+  bool rememberPendingAck(uint32_t messageId);
+  bool rememberAcknowledged(uint32_t messageId);
+  void resetAcknowledgements();
 
   static uint16_t readU16(const uint8_t* bytes);
   static uint32_t readU32(const uint8_t* bytes);

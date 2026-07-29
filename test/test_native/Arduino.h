@@ -4,6 +4,14 @@
 #include <cstdint>
 #include <string>
 
+inline unsigned long& fakeArduinoMillis() {
+  static unsigned long value = 0;
+  return value;
+}
+
+inline unsigned long millis() { return fakeArduinoMillis(); }
+inline void yield() { ++fakeArduinoMillis(); }
+
 class Stream {
  public:
   virtual ~Stream() = default;
