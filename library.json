@@ -1,8 +1,8 @@
 {
   "name": "OpenNet",
-  "version": "0.1.0",
-  "description": "Typed, reliable messaging between ESP32, Raspberry Pi, and backend services.",
-  "keywords": ["esp32", "raspberry-pi", "iot", "tcp", "messaging"],
+  "version": "0.1.1",
+  "description": "Typed ONP/1 messaging over TCP/TLS and reliable Arduino streams.",
+  "keywords": ["esp32", "raspberry-pi", "iot", "tcp", "tls", "bluetooth", "messaging"],
   "repository": {
     "type": "git",
     "url": "https://github.com/devkyato/OpenNet.git"

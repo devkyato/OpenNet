@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opennet-protocol"
-version = "0.1.0"
-description = "Typed ONP/1 messaging for Raspberry Pi and backend systems"
+version = "0.1.1"
+description = "Dependency-free typed ONP/1 messaging for Raspberry Pi, ESP32, and backend systems"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -29,7 +29,8 @@ dev = [
 ]
 
 [project.scripts]
-opennet-server = "opennet.cli:main"
+opennet = "opennet.cli:main"
+opennet-server = "opennet.cli:server_main"
 
 [project.urls]
 Homepage = "https://github.com/devkyato/OpenNet"

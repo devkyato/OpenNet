@@ -1,44 +1,55 @@
 # Architecture
 
-OpenNet separates the parts that must interoperate from platform-specific I/O.
+OpenNet separates ONP/1 framing from the byte stream carrying it. Both endpoints
+must provide a reliable, ordered stream; Wi-Fi itself is not required.
 
-```text
-Application values and topics
-           |
-      OpenNet API
-           |
-   ONP/1 frame codec       <- language-neutral and tested with vectors
-           |
- TCP or TLS byte stream    <- reliable ordered transport
-           |
- Wi-Fi / Ethernet / OS networking
+```mermaid
+flowchart LR
+    A["Application values<br/>JSON · text · numbers · bytes"] --> B["OpenNet API"]
+    B --> C["ONP/1 codec<br/>24-byte header · type · topic · CRC-32"]
+    C --> D{"Reliable ordered stream"}
+    D --> E["TCP/TLS<br/>Wi-Fi, Ethernet, internet"]
+    D --> F["Arduino Stream<br/>UART, USB serial"]
+    D --> G["Bluetooth Classic SPP<br/>supported ESP32 models"]
 ```
 
-The Python package provides the reference codec plus asyncio client and server. The
-Arduino library uses the ESP32 networking clients and a bounded receive state
-machine. Both implementations use the same 24-byte header.
+The Python package provides the reference codec and asyncio TCP/TLS client and
+server. The Arduino implementation accepts either a `Client` (`WiFiClient`,
+`WiFiClientSecure`) or an already-open Arduino `Stream` (`Serial`,
+`BluetoothSerial`). The frame bytes are identical across transports.
 
-## Reliability
+BLE GATT is packet-oriented, not a continuous byte stream. It needs an adapter
+that fragments and reassembles ONP frames; v0.1.1 does not claim direct BLE
+support. ESP32-C3/S3 boards also do not provide Bluetooth Classic SPP.
 
-TCP already retransmits lost packets and preserves order. ONP/1 acknowledgements
-add application-level evidence that a complete frame was parsed and accepted.
-Applications needing durable delivery must persist outgoing messages and decide
-how to handle duplicates after reconnecting; OpenNet does not pretend RAM queues
-survive power loss.
+## Delivery and retry
 
-## Latency
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    C->>S: DATA id=42, ACK_REQUIRED
+    Note over C: ACK timeout
+    C->>S: DATA id=42, ACK_REQUIRED + DUPLICATE
+    Note over S: bounded recent-ID window
+    S-->>C: ACK id=42, DUPLICATE
+    Note over C: delivery confirmed
+```
 
-OpenNet disables Nagle's algorithm where supported, uses a compact header, and
-does not require a broker round trip. Actual latency still depends on radio
-conditions, access-point load, power-saving mode, operating-system scheduling, and
-the application. Low-signal or disconnected areas cannot be made reliable by a
-software library alone.
+Python retries reuse the message ID, and the server suppresses duplicate handler
+execution within a configurable bounded window. An ACK proves that the peer
+parsed and accepted the frame; it does not make delivery durable across power
+loss. Durable applications must persist outbound messages and application state.
 
-## Planned extensions
+## Defensive boundaries
 
-- Authenticated session handshake and topic authorization helpers.
-- Optional service discovery for trusted LANs.
-- Persistent outbound queues.
-- TypeScript and portable C bindings.
+- Payload, topic, receive-queue, connection, and duplicate-window bounds prevent
+  unbounded routine growth.
+- The CRC-32 catches accidental corruption before the application sees a value.
+- Strict type and control-frame validation rejects malformed inputs.
+- Remote CLI connections require TLS unless plaintext is explicitly enabled.
+- TLS provides confidentiality and server identity; mutual TLS can also identify
+  clients.
 
-Extensions will be proposed in issues and specified before implementation.
+See [Security](security.md) for the trust model and [Transports](transports.md)
+for supported connection types.

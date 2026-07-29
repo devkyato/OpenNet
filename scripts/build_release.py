@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import tempfile
 import zipfile
 from pathlib import Path
 
@@ -19,6 +18,7 @@ TEXT_FILES = [
     "keywords.txt",
 ]
 DIRECTORIES = ["src", "examples", "docs"]
+ZIP_TIMESTAMP = (2024, 1, 1, 0, 0, 0)
 
 
 def versions() -> dict[str, str]:
@@ -52,22 +52,18 @@ def build(expected: str | None) -> Path:
 
     output = ROOT / "dist" / f"OpenNet-{version}.zip"
     output.parent.mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory() as temporary:
-        staging = Path(temporary) / "OpenNet"
-        staging.mkdir()
-        for relative in TEXT_FILES:
-            target = staging / relative
-            target.write_bytes((ROOT / relative).read_bytes())
-        for directory in DIRECTORIES:
-            for source in (ROOT / directory).rglob("*"):
-                if source.is_file():
-                    target = staging / source.relative_to(ROOT)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(source.read_bytes())
-        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-            for source in sorted(staging.rglob("*")):
-                if source.is_file():
-                    archive.write(source, source.relative_to(staging.parent))
+    sources = [ROOT / relative for relative in TEXT_FILES]
+    for directory in DIRECTORIES:
+        sources.extend(source for source in (ROOT / directory).rglob("*") if source.is_file())
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for source in sorted(sources, key=lambda path: path.as_posix()):
+            info = zipfile.ZipInfo(
+                f"OpenNet/{source.relative_to(ROOT).as_posix()}",
+                ZIP_TIMESTAMP,
+            )
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, source.read_bytes())
     return output
 
 

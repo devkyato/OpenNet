@@ -13,19 +13,15 @@ This includes current Raspberry Pi OS releases on Pi boards capable of running a
 supported Python version.
 
 ```bash
-git clone https://github.com/devkyato/OpenNet.git
-cd OpenNet
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e "./python"
-opennet-server --host 0.0.0.0 --port 8765
+python -m pip install \
+  https://github.com/devkyato/OpenNet/releases/download/v0.1.1/opennet_protocol-0.1.1-py3-none-any.whl
+opennet serve
 ```
 
 On Windows, activate with `.venv\Scripts\activate`.
 
-The example server logs metadata, not full binary payloads. For internet-facing
-deployments, configure TLS and an application authorization policy before opening
-the firewall.
+The default is loopback-only. Follow the [security guide](security.md) to configure
+verified or mutual TLS before exposing the service.
 
 ## ESP32 with Arduino IDE
 
@@ -52,7 +48,7 @@ For another project:
 
 ```ini
 lib_deps =
-  https://github.com/devkyato/OpenNet.git#v0.1.0
+  https://github.com/devkyato/OpenNet.git#v0.1.1
 ```
 
 ## Sending values
@@ -70,3 +66,6 @@ client.sendBool("door/open", false);
 
 Validate incoming JSON against an application schema and bound binary payload sizes
 for the receiving device.
+
+Continue with the [step-by-step tutorials](tutorials.md) and
+[development tips](tips.md).
