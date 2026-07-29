@@ -60,6 +60,18 @@ messages, operation IDs, and application state.
 - **Application idempotency is required:** durable operation IDs and persisted
   results are needed when repeating an action would be unsafe.
 
+## Python client dispatch
+
+The Python client reader handles ACK, PING, PONG, CLOSE, and ERROR control frames
+without waiting for application DATA consumption. DATA enters a bounded queue
+with a deliberate overload policy: when the queue is already full, the client
+sends a generic `receive queue full` ERROR and closes instead of blocking the
+reader and hiding later control frames.
+
+PING uses dedicated PONG waiters, so DATA received before a PONG remains in the
+application queue rather than being repeatedly re-read. Outbound writes have a
+configurable timeout, and message-ID allocation skips IDs still waiting for ACK.
+
 ## Authorization path
 
 The optional Python authorizer runs after frame validation and before duplicate

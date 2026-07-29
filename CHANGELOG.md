@@ -28,6 +28,15 @@ All notable changes are documented here. OpenNet follows
   handler completion; delivery guarantees and timeout/overload policies are
   documented without changing ONP/1 bytes.
 
+### Fixed
+
+- Python PING no longer cycles forever when DATA arrives before PONG.
+- A full Python application queue no longer blocks ACK and control processing;
+  overflow now sends ERROR and closes explicitly.
+- Python message-ID wrap skips IDs with pending ACK futures.
+- Python JSON decoding rejects non-standard `NaN` and infinity constants.
+- Python client writes now have a configurable timeout.
+
 ### Compatibility
 
 - ONP/1 framing and typed-value encodings are unchanged.

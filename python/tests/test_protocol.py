@@ -150,3 +150,9 @@ def test_received_data_payload_must_match_declared_type():
     encoded[5] = int(ValueType.BOOL)
     with pytest.raises(ProtocolError, match="BOOL"):
         Frame.from_parts(bytes(encoded[: HEADER.size]), bytes(encoded[HEADER.size :]))
+
+
+@pytest.mark.parametrize("constant", (b"NaN", b"Infinity", b"-Infinity"))
+def test_json_rejects_non_standard_numeric_constants(constant):
+    with pytest.raises(ProtocolError, match="non-standard JSON"):
+        decode_value(ValueType.JSON, constant)

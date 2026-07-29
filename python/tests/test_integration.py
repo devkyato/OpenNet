@@ -4,7 +4,17 @@ from pathlib import Path
 
 import pytest
 
-from opennet import Flags, Frame, FrameKind, OpenNetClient, OpenNetServer, Peer, decode_value
+from opennet import (
+    Flags,
+    Frame,
+    FrameKind,
+    OpenNetClient,
+    OpenNetServer,
+    Peer,
+    ReceiveQueueFull,
+    ValueType,
+    decode_value,
+)
 from opennet.stream import read_frame, write_frame
 
 CERTS = Path(__file__).with_name("certs")
@@ -108,6 +118,119 @@ async def test_client_retries_with_same_id_and_duplicate_flag():
     finally:
         server.close()
         await server.wait_closed()
+
+
+async def test_ping_dispatches_data_arriving_before_pong():
+    async def accept(reader, writer):
+        ping = await read_frame(reader)
+        assert ping.kind is FrameKind.PING
+        data = Frame(
+            FrameKind.DATA,
+            ValueType.UTF8,
+            topic="status/update",
+            payload=b"ready",
+            message_id=41,
+        )
+        writer.write(data.to_bytes() + Frame(FrameKind.PONG).to_bytes())
+        await writer.drain()
+        await read_frame(reader)
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(accept, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        client = OpenNetClient("127.0.0.1", port)
+        await client.connect()
+        await client.ping(timeout=1)
+        data = await client.receive(timeout=1)
+        assert data.kind is FrameKind.DATA
+        assert data.topic == "status/update"
+        assert data.payload == b"ready"
+        await client.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_full_application_queue_does_not_block_ack_dispatch():
+    async def accept(reader, writer):
+        outbound = await read_frame(reader)
+        queued = Frame(
+            FrameKind.DATA,
+            ValueType.UTF8,
+            topic="queued/data",
+            payload=b"x",
+            message_id=99,
+        )
+        ack = Frame(FrameKind.ACK, message_id=outbound.message_id)
+        writer.write(queued.to_bytes() + ack.to_bytes())
+        await writer.drain()
+        await read_frame(reader)
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(accept, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        client = OpenNetClient(
+            "127.0.0.1",
+            port,
+            ack_timeout=0.5,
+            receive_queue_size=1,
+        )
+        await client.connect()
+        assert await client.send("outbound/data", "value") == 1
+        queued = await client.receive(timeout=1)
+        assert queued.topic == "queued/data"
+        await client.close()
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_receive_queue_overflow_closes_with_explicit_error():
+    async def accept(reader, writer):
+        first = Frame(FrameKind.DATA, topic="queue/one", message_id=1)
+        second = Frame(FrameKind.DATA, topic="queue/two", message_id=2)
+        writer.write(first.to_bytes() + second.to_bytes())
+        await writer.drain()
+        response = await read_frame(reader)
+        assert response.kind is FrameKind.ERROR
+        assert response.payload == b"receive queue full"
+        assert await reader.read() == b""
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(accept, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    try:
+        client = OpenNetClient("127.0.0.1", port, receive_queue_size=1)
+        await client.connect()
+        first = await client.receive(timeout=1)
+        assert first.topic == "queue/one"
+        with pytest.raises(ConnectionError) as result:
+            await client.receive(timeout=1)
+        assert isinstance(result.value.__cause__, ReceiveQueueFull)
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+async def test_message_id_wrap_skips_pending_ids():
+    client = OpenNetClient("127.0.0.1")
+    loop = asyncio.get_running_loop()
+    maximum = loop.create_future()
+    first = loop.create_future()
+    client._pending[0xFFFFFFFF] = maximum
+    client._pending[1] = first
+    client._next_id = 0xFFFFFFFF
+
+    assert client._next_message_id() == 2
+    assert client._next_id == 3
+
+    maximum.cancel()
+    first.cancel()
 
 
 async def test_receive_raises_when_remote_closes():

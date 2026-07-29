@@ -33,6 +33,18 @@ class DeliveryTimeout(TimeoutError):
         )
 
 
+class ReceiveQueueFull(ConnectionError):
+    """Raised when DATA backpressure reaches the configured queue bound."""
+
+
+class RemoteError(ConnectionError):
+    """Raised when the peer sends an ONP/1 ERROR control frame."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"OpenNet peer error: {reason}")
+
+
 class FrameKind(IntEnum):
     DATA = 1
     ACK = 2
@@ -268,7 +280,10 @@ def decode_value(value_type: ValueType, payload: bytes) -> Any:
         if value_type is ValueType.UTF8:
             return payload.decode("utf-8")
         if value_type is ValueType.JSON:
-            return json.loads(payload.decode("utf-8"))
+            return json.loads(
+                payload.decode("utf-8"),
+                parse_constant=_reject_json_constant,
+            )
         if value_type is ValueType.INT64:
             if len(payload) != 8:
                 raise ProtocolError("INT64 payload must be 8 bytes")
@@ -280,6 +295,12 @@ def decode_value(value_type: ValueType, payload: bytes) -> Any:
             if not math.isfinite(value):
                 raise ProtocolError("FLOAT64 must be finite")
             return value
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except ProtocolError:
+        raise
+    except (UnicodeDecodeError, ValueError) as exc:
         raise ProtocolError(str(exc)) from exc
     raise ProtocolError(f"unsupported value type {value_type!r}")
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant {value}")

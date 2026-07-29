@@ -10,6 +10,9 @@
   a limit.
 - Call Arduino `poll()` every loop iteration. Long `delay()` calls postpone ACKs,
   pings, and incoming messages.
+- Size Python `receive_queue_size` for the application's burst behavior and keep
+  consuming it. Queue overflow deliberately sends ERROR and closes so control
+  frames never wait forever behind DATA backpressure.
 - Retry idempotent operations. For actions such as “unlock door,” include an
   application operation ID and persist processed IDs.
 - Use JSON for evolving records, typed numbers for frequent scalar telemetry, and
