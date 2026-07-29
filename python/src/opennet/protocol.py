@@ -22,6 +22,17 @@ class ProtocolError(ValueError):
     """Raised when bytes violate ONP/1."""
 
 
+class DeliveryTimeout(TimeoutError):
+    """Raised when an acknowledged DATA frame exhausts its retry budget."""
+
+    def __init__(self, message_id: int, attempts: int) -> None:
+        self.message_id = message_id
+        self.attempts = attempts
+        super().__init__(
+            f"message {message_id} was not acknowledged after {attempts} attempt(s)"
+        )
+
+
 class FrameKind(IntEnum):
     DATA = 1
     ACK = 2
@@ -65,6 +76,21 @@ class Frame:
                 raise ProtocolError("DATA frames require a topic")
             if not 1 <= self.message_id <= 0xFFFFFFFF:
                 raise ProtocolError("DATA message_id must be between 1 and 2^32-1")
+        elif self.topic:
+            raise ProtocolError("control frames must not contain a topic")
+        if self.kind is FrameKind.ACK:
+            if not 1 <= self.message_id <= 0xFFFFFFFF:
+                raise ProtocolError("ACK message_id must be between 1 and 2^32-1")
+            if self.payload or self.value_type is not ValueType.NULL:
+                raise ProtocolError("ACK frames must have an empty NULL payload")
+        elif self.kind in (FrameKind.PING, FrameKind.PONG):
+            if self.message_id != 0 or self.payload or self.value_type is not ValueType.NULL:
+                raise ProtocolError("PING and PONG frames must be empty")
+        elif self.kind in (FrameKind.CLOSE, FrameKind.ERROR):
+            if self.message_id != 0:
+                raise ProtocolError("CLOSE and ERROR message_id must be zero")
+            if self.payload and self.value_type is not ValueType.UTF8:
+                raise ProtocolError("CLOSE and ERROR payloads must be UTF-8")
         if not 0 <= self.message_id <= 0xFFFFFFFF:
             raise ProtocolError("message_id is outside uint32 range")
         if int(self.flags) & ~int(Flags.ACK_REQUIRED | Flags.DUPLICATE):
@@ -140,7 +166,10 @@ class Frame:
             value_type = ValueType(raw_type)
         except (UnicodeDecodeError, ValueError) as exc:
             raise ProtocolError(str(exc)) from exc
-        return cls(kind, value_type, topic, payload, message_id, Flags(raw_flags))
+        frame = cls(kind, value_type, topic, payload, message_id, Flags(raw_flags))
+        if kind is FrameKind.DATA:
+            decode_value(value_type, payload)
+        return frame
 
 
 def inspect_header(header: bytes, max_payload: int = DEFAULT_MAX_PAYLOAD) -> Tuple[int, int]:

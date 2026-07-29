@@ -1,5 +1,6 @@
 #include "OpenNet.h"
 
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -16,8 +17,46 @@ String OpenNetMessage::text() const {
   return result;
 }
 
-OpenNetClient::OpenNetClient(Client& transport, uint32_t maxPayload)
+bool OpenNetMessage::asInt(int64_t& value) const {
+  if (valueType != OpenNetValueType::Int64 || payload.size() != 8) {
+    return false;
+  }
+  uint64_t bits = 0;
+  for (uint8_t byte : payload) {
+    bits = (bits << 8) | byte;
+  }
+  memcpy(&value, &bits, sizeof(value));
+  return true;
+}
+
+bool OpenNetMessage::asDouble(double& value) const {
+  if (valueType != OpenNetValueType::Float64 || payload.size() != 8) {
+    return false;
+  }
+  uint64_t bits = 0;
+  for (uint8_t byte : payload) {
+    bits = (bits << 8) | byte;
+  }
+  memcpy(&value, &bits, sizeof(value));
+  return std::isfinite(value);
+}
+
+bool OpenNetMessage::asBool(bool& value) const {
+  if (valueType != OpenNetValueType::Bool || payload.size() != 1 ||
+      payload[0] > 1) {
+    return false;
+  }
+  value = payload[0] == 1;
+  return true;
+}
+
+bool OpenNetMessage::isNull() const {
+  return valueType == OpenNetValueType::Null && payload.empty();
+}
+
+OpenNetClient::OpenNetClient(Stream& transport, uint32_t maxPayload)
     : transport_(transport),
+      clientTransport_(nullptr),
       maxPayload_(maxPayload),
       nextMessageId_(1),
       lastAcknowledged_(0),
@@ -27,13 +66,19 @@ OpenNetClient::OpenNetClient(Client& transport, uint32_t maxPayload)
       expectedTopicLength_(0),
       expectedPayloadLength_(0) {}
 
+OpenNetClient::OpenNetClient(Client& transport, uint32_t maxPayload)
+    : OpenNetClient(static_cast<Stream&>(transport), maxPayload) {
+  clientTransport_ = &transport;
+}
+
 bool OpenNetClient::connect(const char* host, uint16_t port) {
-  if (host == nullptr || host[0] == '\0' || port == 0) {
+  if (clientTransport_ == nullptr || host == nullptr || host[0] == '\0' ||
+      port == 0) {
     lastError_ = OpenNetError::InvalidArgument;
     return false;
   }
   resetReceiver();
-  if (!transport_.connect(host, port)) {
+  if (!clientTransport_->connect(host, port)) {
     lastError_ = OpenNetError::NotConnected;
     return false;
   }
@@ -42,20 +87,22 @@ bool OpenNetClient::connect(const char* host, uint16_t port) {
 }
 
 void OpenNetClient::disconnect(const char* reason) {
-  if (transport_.connected()) {
+  if (connected()) {
     const uint8_t* bytes = reinterpret_cast<const uint8_t*>(reason);
     const size_t length = reason == nullptr ? 0 : strlen(reason);
     sendFrame(OpenNetFrameKind::Close, OpenNetValueType::Utf8, "", bytes,
               length, 0, 0);
   }
-  transport_.stop();
+  stopTransport();
   resetReceiver();
 }
 
-bool OpenNetClient::connected() const { return transport_.connected(); }
+bool OpenNetClient::connected() const {
+  return clientTransport_ == nullptr || clientTransport_->connected();
+}
 
 void OpenNetClient::poll() {
-  if (!transport_.connected()) {
+  if (!connected()) {
     return;
   }
 
@@ -67,7 +114,7 @@ void OpenNetClient::poll() {
       }
       header_[headerReceived_++] = static_cast<uint8_t>(byte);
       if (headerReceived_ == kHeaderSize && !prepareBody()) {
-        transport_.stop();
+        stopTransport();
         resetReceiver();
         return;
       }
@@ -99,10 +146,14 @@ uint32_t OpenNetClient::lastAcknowledgedMessage() const {
   return lastAcknowledged_;
 }
 
+bool OpenNetClient::acknowledged(uint32_t messageId) const {
+  return messageId != 0 && lastAcknowledged_ == messageId;
+}
+
 uint32_t OpenNetClient::send(const char* topic, OpenNetValueType type,
                              const uint8_t* payload, size_t length,
                              bool requireAck) {
-  if (!transport_.connected()) {
+  if (!connected()) {
     lastError_ = OpenNetError::NotConnected;
     return 0;
   }
@@ -151,6 +202,10 @@ uint32_t OpenNetClient::sendInt(const char* topic, int64_t value,
 
 uint32_t OpenNetClient::sendDouble(const char* topic, double value,
                                    bool requireAck) {
+  if (!std::isfinite(value)) {
+    lastError_ = OpenNetError::InvalidArgument;
+    return 0;
+  }
   static_assert(sizeof(double) == sizeof(uint64_t),
                 "OpenNet requires an IEEE-754 64-bit double");
   uint64_t bits;
@@ -182,7 +237,7 @@ bool OpenNetClient::sendFrame(OpenNetFrameKind kind, OpenNetValueType type,
                               const char* topic, const uint8_t* payload,
                               size_t length, uint32_t messageId,
                               uint8_t flags) {
-  if (!transport_.connected()) {
+  if (!connected()) {
     lastError_ = OpenNetError::NotConnected;
     return false;
   }
@@ -212,19 +267,32 @@ bool OpenNetClient::sendFrame(OpenNetFrameKind kind, OpenNetValueType type,
   checksum = crc32(payload, length, checksum);
   writeU32(header + 16, checksum);
 
-  const size_t expected = kHeaderSize + topicLength + length;
-  size_t written = transport_.write(header, kHeaderSize);
-  written += transport_.write(reinterpret_cast<const uint8_t*>(safeTopic),
-                              topicLength);
-  if (length > 0) {
-    written += transport_.write(payload, length);
-  }
-  if (written != expected) {
+  if (!writeAll(header, kHeaderSize) ||
+      !writeAll(reinterpret_cast<const uint8_t*>(safeTopic), topicLength) ||
+      !writeAll(payload, length)) {
     lastError_ = OpenNetError::TransportWrite;
     return false;
   }
   lastError_ = OpenNetError::None;
   return true;
+}
+
+bool OpenNetClient::writeAll(const uint8_t* data, size_t length) {
+  size_t offset = 0;
+  while (offset < length) {
+    const size_t written = transport_.write(data + offset, length - offset);
+    if (written == 0 || written > length - offset) {
+      return false;
+    }
+    offset += written;
+  }
+  return true;
+}
+
+void OpenNetClient::stopTransport() {
+  if (clientTransport_ != nullptr) {
+    clientTransport_->stop();
+  }
 }
 
 void OpenNetClient::resetReceiver() {
@@ -246,8 +314,42 @@ bool OpenNetClient::prepareBody() {
   }
   expectedTopicLength_ = readU16(header_ + 6);
   expectedPayloadLength_ = readU32(header_ + 12);
-  if (header_[3] == static_cast<uint8_t>(OpenNetFrameKind::Data) &&
-      (expectedTopicLength_ == 0 || readU32(header_ + 8) == 0)) {
+  const auto kind = static_cast<OpenNetFrameKind>(header_[3]);
+  const auto valueType = static_cast<OpenNetValueType>(header_[5]);
+  const uint32_t messageId = readU32(header_ + 8);
+  if (kind == OpenNetFrameKind::Data &&
+      (expectedTopicLength_ == 0 || messageId == 0)) {
+    lastError_ = OpenNetError::InvalidFrame;
+    return false;
+  }
+  if (kind != OpenNetFrameKind::Data && expectedTopicLength_ != 0) {
+    lastError_ = OpenNetError::InvalidFrame;
+    return false;
+  }
+  if (kind == OpenNetFrameKind::Ack &&
+      (messageId == 0 || expectedPayloadLength_ != 0 ||
+       valueType != OpenNetValueType::Null)) {
+    lastError_ = OpenNetError::InvalidFrame;
+    return false;
+  }
+  if ((kind == OpenNetFrameKind::Ping || kind == OpenNetFrameKind::Pong) &&
+      (messageId != 0 || expectedPayloadLength_ != 0 ||
+       valueType != OpenNetValueType::Null)) {
+    lastError_ = OpenNetError::InvalidFrame;
+    return false;
+  }
+  if ((kind == OpenNetFrameKind::Close || kind == OpenNetFrameKind::Error) &&
+      (messageId != 0 ||
+       (expectedPayloadLength_ != 0 && valueType != OpenNetValueType::Utf8))) {
+    lastError_ = OpenNetError::InvalidFrame;
+    return false;
+  }
+  if (kind == OpenNetFrameKind::Data &&
+      ((valueType == OpenNetValueType::Null && expectedPayloadLength_ != 0) ||
+       (valueType == OpenNetValueType::Bool && expectedPayloadLength_ != 1) ||
+       ((valueType == OpenNetValueType::Int64 ||
+         valueType == OpenNetValueType::Float64) &&
+        expectedPayloadLength_ != 8))) {
     lastError_ = OpenNetError::InvalidFrame;
     return false;
   }
@@ -274,7 +376,7 @@ void OpenNetClient::handleFrame() {
   actualChecksum = crc32(payload, expectedPayloadLength_, actualChecksum);
   if (actualChecksum != expectedChecksum) {
     lastError_ = OpenNetError::ChecksumMismatch;
-    transport_.stop();
+    stopTransport();
     return;
   }
 
@@ -292,6 +394,12 @@ void OpenNetClient::handleFrame() {
   if (kind != OpenNetFrameKind::Data) {
     return;
   }
+  if (static_cast<OpenNetValueType>(header_[5]) == OpenNetValueType::Bool &&
+      payload[0] > 1) {
+    lastError_ = OpenNetError::InvalidFrame;
+    stopTransport();
+    return;
+  }
 
   OpenNetMessage message;
   message.kind = kind;
@@ -303,6 +411,14 @@ void OpenNetClient::handleFrame() {
     message.topic += static_cast<char>(body_[i]);
   }
   message.payload.assign(payload, payload + expectedPayloadLength_);
+  if (message.valueType == OpenNetValueType::Float64) {
+    double value = 0;
+    if (!message.asDouble(value)) {
+      lastError_ = OpenNetError::InvalidFrame;
+      stopTransport();
+      return;
+    }
+  }
   if (handler_) {
     handler_(message);
   }
@@ -346,4 +462,26 @@ uint32_t OpenNetClient::crc32(const uint8_t* data, size_t length,
     }
   }
   return crc ^ 0xFFFFFFFFu;
+}
+
+const char* openNetErrorName(OpenNetError error) {
+  switch (error) {
+    case OpenNetError::None:
+      return "none";
+    case OpenNetError::NotConnected:
+      return "not connected";
+    case OpenNetError::InvalidArgument:
+      return "invalid argument";
+    case OpenNetError::TopicTooLong:
+      return "topic too long";
+    case OpenNetError::PayloadTooLarge:
+      return "payload too large";
+    case OpenNetError::TransportWrite:
+      return "transport write failed";
+    case OpenNetError::InvalidFrame:
+      return "invalid frame";
+    case OpenNetError::ChecksumMismatch:
+      return "checksum mismatch";
+  }
+  return "unknown error";
 }

@@ -84,6 +84,46 @@ def test_oversize_is_rejected_before_body_allocation():
 
 
 @pytest.mark.parametrize(
+    "frame",
+    [
+        Frame(FrameKind.ACK, message_id=1),
+        Frame(FrameKind.PING),
+        Frame(FrameKind.PONG),
+        Frame(FrameKind.CLOSE),
+        Frame(FrameKind.ERROR),
+    ],
+)
+def test_control_frames_round_trip(frame):
+    encoded = frame.to_bytes()
+    decoded = Frame.from_parts(encoded[: HEADER.size], encoded[HEADER.size :])
+    assert decoded == frame
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: Frame(FrameKind.ACK),
+        lambda: Frame(FrameKind.ACK, payload=b"x", message_id=1),
+        lambda: Frame(FrameKind.PING, message_id=1),
+        lambda: Frame(FrameKind.PONG, topic="not-allowed"),
+        lambda: Frame(FrameKind.ERROR, payload=b"not-null"),
+    ],
+)
+def test_invalid_control_frames_are_rejected(factory):
+    with pytest.raises(ProtocolError):
+        factory()
+
+
+def test_nonzero_reserved_header_is_ignored_for_forward_compatibility():
+    encoded = bytearray(Frame(FrameKind.PING).to_bytes())
+    encoded[20:24] = b"\x01\x02\x03\x04"
+    assert inspect_header(bytes(encoded[: HEADER.size])) == (0, 0)
+    assert (
+        Frame.from_parts(bytes(encoded[: HEADER.size]), b"").kind is FrameKind.PING
+    )
+
+
+@pytest.mark.parametrize(
     ("value_type", "payload"),
     [
         (ValueType.BOOL, b"\x02"),
@@ -95,3 +135,18 @@ def test_oversize_is_rejected_before_body_allocation():
 def test_invalid_typed_payloads(value_type, payload):
     with pytest.raises(ProtocolError):
         decode_value(value_type, payload)
+
+
+def test_received_data_payload_must_match_declared_type():
+    encoded = bytearray(
+        Frame(
+            FrameKind.DATA,
+            ValueType.BYTES,
+            "sensor/value",
+            b"\x02",
+            7,
+        ).to_bytes()
+    )
+    encoded[5] = int(ValueType.BOOL)
+    with pytest.raises(ProtocolError, match="BOOL"):
+        Frame.from_parts(bytes(encoded[: HEADER.size]), bytes(encoded[HEADER.size :]))

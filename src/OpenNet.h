@@ -34,6 +34,10 @@ struct OpenNetMessage {
   uint8_t flags;
 
   String text() const;
+  bool asInt(int64_t& value) const;
+  bool asDouble(double& value) const;
+  bool asBool(bool& value) const;
+  bool isNull() const;
 };
 
 enum class OpenNetError : uint8_t {
@@ -56,7 +60,11 @@ class OpenNetClient {
 
   explicit OpenNetClient(Client& transport,
                          uint32_t maxPayload = kDefaultMaxPayload);
+  explicit OpenNetClient(Stream& transport,
+                         uint32_t maxPayload = kDefaultMaxPayload);
 
+  // Stream transports such as Serial and BluetoothSerial are opened by their
+  // caller; connect() is available for Client transports such as WiFiClient.
   bool connect(const char* host, uint16_t port);
   void disconnect(const char* reason = nullptr);
   bool connected() const;
@@ -65,6 +73,7 @@ class OpenNetClient {
   void onMessage(MessageHandler handler);
   OpenNetError lastError() const;
   uint32_t lastAcknowledgedMessage() const;
+  bool acknowledged(uint32_t messageId) const;
 
   uint32_t send(const char* topic, OpenNetValueType type,
                 const uint8_t* payload, size_t length,
@@ -87,7 +96,8 @@ class OpenNetClient {
   static constexpr uint8_t kAckRequired = 0x01;
   static constexpr uint8_t kAllowedFlags = 0x03;
 
-  Client& transport_;
+  Stream& transport_;
+  Client* clientTransport_;
   uint32_t maxPayload_;
   uint32_t nextMessageId_;
   uint32_t lastAcknowledged_;
@@ -104,6 +114,8 @@ class OpenNetClient {
   bool sendFrame(OpenNetFrameKind kind, OpenNetValueType type,
                  const char* topic, const uint8_t* payload, size_t length,
                  uint32_t messageId, uint8_t flags);
+  bool writeAll(const uint8_t* data, size_t length);
+  void stopTransport();
   void resetReceiver();
   bool prepareBody();
   void handleFrame();
@@ -115,3 +127,5 @@ class OpenNetClient {
   static uint32_t crc32(const uint8_t* data, size_t length,
                         uint32_t previous = 0);
 };
+
+const char* openNetErrorName(OpenNetError error);

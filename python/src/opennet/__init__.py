@@ -2,6 +2,7 @@
 
 from .client import OpenNetClient
 from .protocol import (
+    DeliveryTimeout,
     Flags,
     Frame,
     FrameKind,
@@ -10,9 +11,10 @@ from .protocol import (
     decode_value,
     encode_value,
 )
-from .server import OpenNetServer, Peer
+from .server import OpenNetServer, Peer, ServerStats
 
 __all__ = [
+    "DeliveryTimeout",
     "Flags",
     "Frame",
     "FrameKind",
@@ -20,9 +22,10 @@ __all__ = [
     "OpenNetServer",
     "Peer",
     "ProtocolError",
+    "ServerStats",
     "ValueType",
     "decode_value",
     "encode_value",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
