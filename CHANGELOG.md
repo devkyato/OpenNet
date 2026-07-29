@@ -22,6 +22,8 @@ All notable changes are documented here. OpenNet follows
 - Current install examples and package metadata target v0.2.0.
 - Project positioning now emphasizes direct embedded-to-host communication, and
   the reliable-stream boundary explicitly documents why raw UDP is unsupported.
+- Arduino receive handling now moves the validated body buffer into the callback
+  message instead of allocating and copying a second payload vector.
 
 ### Compatibility
 

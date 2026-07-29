@@ -121,6 +121,7 @@ device identity matters—outside isolated local testing.
 - [Certificate-to-topic authorization](docs/authorization.md)
 - [Actual GitHub adoption counters and analytics limits](docs/adoption-analytics.md)
 - [Transport support, including Bluetooth boundaries](docs/transports.md)
+- [Arduino memory model and payload sizing](docs/embedded-memory.md)
 
 Measured loopback results are software baselines, not invented Wi-Fi or hardware
 claims. Hardware field reports are welcome through the

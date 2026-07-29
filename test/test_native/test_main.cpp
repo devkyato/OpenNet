@@ -106,9 +106,9 @@ void testIncomingDataIsDeliveredAndAcknowledged() {
   FakeClient transport;
   OpenNetClient client(transport);
   assert(client.connect("127.0.0.1", 8765));
-  bool handled = false;
+  int handled = 0;
   client.onMessage([&handled](const OpenNetMessage& message) {
-    handled = true;
+    ++handled;
     assert(message.messageId == 9);
     assert(std::strcmp(message.topic.c_str(), "server") == 0);
     assert(std::strcmp(message.text().c_str(), "ok") == 0);
@@ -118,7 +118,15 @@ void testIncomingDataIsDeliveredAndAcknowledged() {
       "4f4e0101010100060000000900000002cd83e74a000000007365727665726f6b"));
 
   client.poll();
-  assert(handled);
+  assert(handled == 1);
+  assert(transport.outbound ==
+         fromHex("4f4e01020006000000000009000000000000000000000000"));
+
+  transport.outbound.clear();
+  transport.receive(fromHex(
+      "4f4e0101010100060000000900000002cd83e74a000000007365727665726f6b"));
+  client.poll();
+  assert(handled == 2);
   assert(transport.outbound ==
          fromHex("4f4e01020006000000000009000000000000000000000000"));
 }

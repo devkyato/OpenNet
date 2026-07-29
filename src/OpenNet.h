@@ -25,6 +25,11 @@ enum class OpenNetValueType : uint8_t {
   Null = 6,
 };
 
+static_assert(sizeof(OpenNetFrameKind) == sizeof(uint8_t),
+              "OpenNet frame kinds must remain one byte");
+static_assert(sizeof(OpenNetValueType) == sizeof(uint8_t),
+              "OpenNet value types must remain one byte");
+
 struct OpenNetMessage {
   OpenNetFrameKind kind;
   OpenNetValueType valueType;
@@ -50,6 +55,9 @@ enum class OpenNetError : uint8_t {
   InvalidFrame,
   ChecksumMismatch,
 };
+
+static_assert(sizeof(OpenNetError) == sizeof(uint8_t),
+              "OpenNet errors must remain one byte");
 
 class OpenNetClient {
  public:

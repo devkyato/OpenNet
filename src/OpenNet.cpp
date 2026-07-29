@@ -410,7 +410,13 @@ void OpenNetClient::handleFrame() {
   for (size_t i = 0; i < expectedTopicLength_; ++i) {
     message.topic += static_cast<char>(body_[i]);
   }
-  message.payload.assign(payload, payload + expectedPayloadLength_);
+  if (expectedPayloadLength_ > 0) {
+    memmove(body_.data(), payload, expectedPayloadLength_);
+    body_.resize(expectedPayloadLength_);
+  } else {
+    body_.clear();
+  }
+  message.payload = std::move(body_);
   if (message.valueType == OpenNetValueType::Float64) {
     double value = 0;
     if (!message.asDouble(value)) {
@@ -422,6 +428,7 @@ void OpenNetClient::handleFrame() {
   if (handler_) {
     handler_(message);
   }
+  body_ = std::move(message.payload);
   if ((message.flags & kAckRequired) != 0) {
     sendFrame(OpenNetFrameKind::Ack, OpenNetValueType::Null, "", nullptr, 0,
               message.messageId, 0);
