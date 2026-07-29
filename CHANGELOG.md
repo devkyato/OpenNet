@@ -48,6 +48,9 @@ All notable changes are documented here. OpenNet follows
   uses bounded pending/history tables.
 - Arduino applications can provide a fixed receive buffer and function-pointer
   message view to avoid OpenNet receive-path heap allocation.
+- The CLI rejects oversized files before reading them, logs payload metadata
+  rather than values by default, offers a shared topic-prefix allowlist, and
+  labels its benchmark as sequential acknowledged round trips.
 
 ### Compatibility
 
