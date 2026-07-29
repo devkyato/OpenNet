@@ -23,6 +23,7 @@ from .protocol import (
 from .stream import read_frame, write_frame
 
 Handler = Callable[["Peer", Frame], Union[None, Awaitable[None]]]
+Authorizer = Callable[["Peer", Frame], Union[bool, Awaitable[bool]]]
 
 
 class SocketLike(Protocol):
@@ -40,6 +41,19 @@ class Peer:
     @property
     def address(self) -> object:
         return self.writer.get_extra_info("peername")
+
+    @property
+    def tls_enabled(self) -> bool:
+        """Return whether this peer is connected through TLS."""
+        return self.writer.get_extra_info("ssl_object") is not None
+
+    @property
+    def tls_peer_certificate(self) -> Optional[dict[str, Any]]:
+        """Return the verified peer certificate, when the TLS layer provides one."""
+        ssl_object = self.writer.get_extra_info("ssl_object")
+        if ssl_object is None:
+            return None
+        return cast(Optional[dict[str, Any]], ssl_object.getpeercert())
 
     async def send_frame(self, frame: Frame) -> None:
         await write_frame(self.writer, frame, self.max_payload)
@@ -75,6 +89,7 @@ class ServerStats:
     received_messages: int = 0
     duplicate_messages: int = 0
     handler_errors: int = 0
+    authorization_denials: int = 0
 
 
 class OpenNetServer:
@@ -87,6 +102,7 @@ class OpenNetServer:
         host: str = "127.0.0.1",
         port: int = 8765,
         ssl_context: Optional[ssl.SSLContext] = None,
+        authorizer: Optional[Authorizer] = None,
         max_payload: int = DEFAULT_MAX_PAYLOAD,
         max_connections: int = 128,
         deduplication_window: int = 4096,
@@ -103,6 +119,7 @@ class OpenNetServer:
         self.host = host
         self.port = port
         self.ssl_context = ssl_context
+        self.authorizer = authorizer
         self.max_payload = max_payload
         self.max_connections = max_connections
         self.deduplication_window = deduplication_window
@@ -176,6 +193,24 @@ class OpenNetServer:
                 if frame.kind is not FrameKind.DATA:
                     continue
                 self.stats.received_messages += 1
+                if self.authorizer is not None:
+                    try:
+                        decision = self.authorizer(peer, frame)
+                        if inspect.isawaitable(decision):
+                            decision = await decision
+                        authorized = decision is True
+                    except Exception:
+                        authorized = False
+                    if not authorized:
+                        self.stats.authorization_denials += 1
+                        await peer.send_frame(
+                            Frame(
+                                FrameKind.ERROR,
+                                ValueType.UTF8,
+                                payload=b"message not authorized",
+                            )
+                        )
+                        break
                 duplicate = frame.message_id in seen
                 if duplicate:
                     self.stats.duplicate_messages += 1

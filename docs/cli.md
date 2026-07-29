@@ -12,6 +12,10 @@ Useful controls include `--max-payload`, `--max-connections`,
 `--deduplication-window`, `--tls-cert`, `--tls-key`, and `--tls-client-ca`.
 Remote plaintext listeners require `--allow-plaintext`.
 
+The general-purpose CLI server logs or echoes messages; it does not accept a
+custom topic policy on the command line. Use the Python `OpenNetServer`
+`authorizer` API when certificate-to-topic rules are required.
+
 ## Send
 
 ```sh

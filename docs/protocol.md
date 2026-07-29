@@ -99,3 +99,8 @@ confidentiality, peer authentication, and tamper resistance.
 Senders must use version 1. A version-1 receiver must ignore non-zero reserved
 header bytes for forward compatibility but reject reserved flag bits. New value
 types or frame kinds require a protocol revision or an extension specification.
+
+OpenNet v0.2.0 adds an optional Python server authorization callback without
+changing the ONP/1 frame, kinds, flags, types, or connection lifecycle. A denied
+DATA frame receives the existing ERROR control frame and the connection closes;
+it is not acknowledged.

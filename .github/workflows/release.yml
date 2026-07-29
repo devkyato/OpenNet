@@ -22,11 +22,13 @@ jobs:
           cache: pip
       - name: Verify, test, and build
         run: |
-          python -m pip install -e "./python[dev]" build
+          python -m pip install -e "./python[dev]" build platformio
           python -m pytest python
           python -m ruff check python benchmarks scripts
           python -m mypy python/src
           python scripts/check_docs.py
+          platformio test -e native
+          platformio run -e esp32dev
           python -m build python
           python scripts/build_release.py --expected-version "${GITHUB_REF_NAME#v}"
           python scripts/build_linux_bundle.py --expected-version "${GITHUB_REF_NAME#v}"

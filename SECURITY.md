@@ -22,7 +22,9 @@ coordinate disclosure after a fix is available.
 - Plain TCP provides no confidentiality, peer identity, or replay protection.
 - Use TLS with certificate validation across untrusted networks.
 - Do not use `setInsecure()` in production.
-- Applications must authorize topics and validate payloads.
+- Applications must authorize topics and validate payloads. Python servers can
+  use the optional pre-handler `authorizer`; other deployments must enforce an
+  equivalent application policy.
 - The 16 MiB frame limit reduces memory-exhaustion risk; deployments should choose
   a smaller application limit appropriate for their hardware.
 

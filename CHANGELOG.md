@@ -5,6 +5,27 @@ All notable changes are documented here. OpenNet follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-29
+
+### Added
+
+- Optional synchronous or asynchronous server authorization before DATA handlers
+  and acknowledgements.
+- TLS state and verified peer-certificate access through the Python `Peer` API.
+- Fail-closed authorization behavior, a denial counter, mutual-TLS integration
+  coverage, and test-only certificate fixtures.
+- A practical certificate-to-topic authorization guide and v0.2.0 release notes.
+
+### Changed
+
+- Release verification now includes the native Arduino tests and ESP32 build.
+- Current install examples and package metadata target v0.2.0.
+
+### Compatibility
+
+- ONP/1 framing and typed-value encodings are unchanged.
+- The Python server additions are optional and backward compatible.
+
 ## [0.1.1] - 2026-07-29
 
 ### Added
@@ -38,6 +59,7 @@ All notable changes are documented here. OpenNet follows
 - Arduino IDE, PlatformIO, and Python examples.
 - Cross-platform tests, CI, packaging, and contributor documentation.
 
-[Unreleased]: https://github.com/devkyato/OpenNet/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/devkyato/OpenNet/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/devkyato/OpenNet/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/devkyato/OpenNet/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/devkyato/OpenNet/releases/tag/v0.1.0
