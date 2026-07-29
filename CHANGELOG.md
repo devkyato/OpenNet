@@ -53,6 +53,8 @@ All notable changes are documented here. OpenNet follows
   labels its benchmark as sequential acknowledged round trips.
 - A Python server at its connection limit now sends a best-effort ERROR before
   closing the rejected connection.
+- GitHub Actions dependencies are pinned to immutable upstream commits with
+  readable release-version comments.
 
 ### Compatibility
 
