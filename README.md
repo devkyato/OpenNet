@@ -7,9 +7,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-4a638f.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/protocol-ONP%2F1-4a638f.svg)](docs/protocol.md)
 
-OpenNet is a small, dependency-free typed messaging protocol I built for direct
-communication between ESP32 devices, Raspberry Pi computers, and backend
-services. It sends
+OpenNet is a focused, dependency-free messaging protocol I built for direct
+links between embedded devices and a Python host—especially an ESP32 talking to
+a Raspberry Pi or backend service. It is not a general cross-platform
+communication layer or a replacement for MQTT, HTTP, or WebSocket. It sends
 JSON, text, signed integers, finite doubles, booleans, null, and arbitrary binary
 data over TCP/TLS or another reliable ordered stream.
 
@@ -27,6 +28,13 @@ the same meaning whether it travels through an ESP32 Wi-Fi client, a serial
 stream, or a Python TLS connection. I thought about reliability on that point
 too, which is why retries keep the same message ID and receivers can suppress
 recent duplicates without pretending the message is durably stored.
+
+Why make ONP/1 when other protocols already exist? I wanted the framing, typing,
+ACK behavior, limits, and cross-language test vectors to stay small enough to
+read end to end. MQTT is the stronger choice for brokered fleets and retained
+messages; HTTP and WebSocket are stronger when web ecosystems matter. ONP/1 is
+for the narrower space where one embedded peer and one host need a direct,
+inspectable contract without a broker.
 
 - One small API and one frame format across ESP32 and Python.
 - Typed values without a JSON dependency for every scalar or binary payload.
@@ -108,6 +116,7 @@ device identity matters—outside isolated local testing.
 
 - [Measured TCP/TLS and 20-client load results](docs/benchmarks.md)
 - [Comparison with raw TCP, MQTT, WebSocket, and HTTP](docs/comparison.md)
+- [Why ONP/1 exists and what it deliberately does not do](docs/design-rationale.md)
 - [Architecture, ACK retry, and defensive boundaries](docs/architecture.md)
 - [Certificate-to-topic authorization](docs/authorization.md)
 - [Actual GitHub adoption counters and analytics limits](docs/adoption-analytics.md)
