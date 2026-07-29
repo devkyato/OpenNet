@@ -25,3 +25,7 @@ coordinate disclosure after a fix is available.
 - Applications must authorize topics and validate payloads.
 - The 16 MiB frame limit reduces memory-exhaustion risk; deployments should choose
   a smaller application limit appropriate for their hardware.
+
+The CLI defaults to loopback and requires an explicit flag for remote plaintext.
+Mutual TLS is available when deployments must authenticate client devices. See the
+[security guide](docs/security.md) for commands, limits, and deployment checklists.

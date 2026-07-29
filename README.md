@@ -3,78 +3,122 @@
 ![OpenNet cover](docs/assets/opennet-cover.png)
 
 [![CI](https://github.com/devkyato/OpenNet/actions/workflows/ci.yml/badge.svg)](https://github.com/devkyato/OpenNet/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/devkyato/OpenNet)](https://github.com/devkyato/OpenNet/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-4a638f.svg)](LICENSE)
 [![Protocol](https://img.shields.io/badge/protocol-ONP%2F1-4a638f.svg)](docs/protocol.md)
 
-OpenNet is a small, typed messaging protocol and library for sending JSON, text,
-numbers, and arbitrary binary data between ESP32 devices, Raspberry Pi computers,
-and backend services over Wi-Fi or Ethernet.
+OpenNet is a dependency-free typed messaging protocol for direct communication
+between ESP32 devices, Raspberry Pi computers, and backend services. It sends
+JSON, text, signed integers, finite doubles, booleans, null, and arbitrary binary
+data over TCP/TLS or another reliable ordered stream.
 
-The first release deliberately targets one dependable path: an ESP32 client and a
-Python 3.9+ client/server communicating over TCP. The wire format is documented and
-language-neutral, so additional transports and language bindings can be added
-without inventing incompatible message formats.
+Version 0.1.1 is an alpha release for real projects and learning. It has a
+documented wire format, bounded resource use, retries and duplicate suppression,
+native Arduino protocol tests, Python tests across 3.9–3.14, reproducible release
+packages, measured local performance, and security guidance. It does not claim
+that a radio or internet route exists when the underlying hardware/network is
+unavailable.
 
-## What it provides
+## Why OpenNet
 
-- A compact binary frame with versioning, message IDs, type information, CRC-32,
-  and a 16 MiB defensive payload limit.
-- JSON, UTF-8 text, signed integers, IEEE-754 doubles, booleans, null, and raw bytes.
-- Async Python client/server APIs for Raspberry Pi and backend systems.
-- An Arduino-compatible ESP32 client with reconnect, heartbeat, and delivery ACKs.
-- Optional TLS at the transport layer.
-- Arduino IDE, PlatformIO, Python, and VS Code examples.
-- Protocol conformance tests and cross-platform CI.
+- One small API and one frame format across ESP32 and Python.
+- Typed values without a JSON dependency for every scalar or binary payload.
+- Optional application ACKs, retry with stable message IDs, and bounded
+  duplicate suppression.
+- TCP/TLS over Wi-Fi, Ethernet, or routed networks.
+- Generic Arduino `Stream` support for UART, USB serial, and Bluetooth Classic
+  SPP on compatible ESP32 hardware.
+- Strict control frames, CRC-32 corruption detection, payload limits, bounded
+  queues, connection limits, and partial transport-write handling.
+- CLI tools to serve, send, ping, and benchmark.
+- Arduino IDE, PlatformIO/VS Code, Python, Linux/systemd, and security tutorials.
 
-## Five-minute start
+## Install
 
-Run the Python server:
+Python wheel from the release page:
 
-```bash
-python -m pip install -e "./python[dev]"
-opennet-server --host 0.0.0.0 --port 8765
+```sh
+python -m pip install \
+  https://github.com/devkyato/OpenNet/releases/download/v0.1.1/opennet_protocol-0.1.1-py3-none-any.whl
+opennet --version
 ```
 
-Install this repository as an Arduino library, open
-`File > Examples > OpenNet > TelemetryClient`, set the Wi-Fi credentials and
-server address, then upload it to an ESP32.
+For an isolated command:
 
-Python clients are equally small:
+```sh
+pipx install \
+  https://github.com/devkyato/OpenNet/releases/download/v0.1.1/opennet_protocol-0.1.1-py3-none-any.whl
+```
+
+For Raspberry Pi/Linux, extract `OpenNet-linux-0.1.1.tar.gz` and run
+`sudo ./install.sh`. It creates a hardened, unprivileged systemd service with a
+loopback-only default. For Arduino IDE, install `OpenNet-0.1.1.zip` through
+**Sketch > Include Library > Add .ZIP Library**.
+
+The Python distribution is installable with pip, but v0.1.1 is distributed from
+GitHub Releases rather than the public PyPI index.
+
+## Five-minute local test
+
+Terminal one:
+
+```sh
+opennet serve --echo
+```
+
+Terminal two:
+
+```sh
+opennet ping --count 5
+opennet send sensor/temperature 24.7 --type float
+opennet send device/state '{"online":true}' --type json
+opennet benchmark --count 1000 --payload-size 64
+```
+
+Python code is equally small:
 
 ```python
 import asyncio
 from opennet import OpenNetClient
 
 async def main():
-    async with OpenNetClient("192.168.1.50", 8765) as client:
-        await client.send("temperature", {"celsius": 24.7})
+    async with OpenNetClient("127.0.0.1") as client:
+        message_id = await client.send(
+            "lab/temperature", 24.7, retries=2
+        )
+        print("acknowledged", message_id)
 
 asyncio.run(main())
 ```
 
-See the [getting-started guide](docs/getting-started.md), [protocol
-specification](docs/protocol.md), and [compatibility policy](docs/compatibility.md).
+The CLI defaults to loopback and refuses remote plaintext unless it is explicitly
+allowed for a trusted development network. Use verified TLS—and mutual TLS when
+device identity matters—outside isolated local testing.
 
-## Project status
+## Evidence and design
 
-OpenNet is pre-1.0 software. ONP/1 framing is stable for the v0.x series, while
-higher-level APIs may improve based on real hardware feedback. Do not represent
-untested boards or operating systems as supported; add a compatibility report when
-you test one.
+- [Measured TCP/TLS and 20-client load results](docs/benchmarks.md)
+- [Comparison with raw TCP, MQTT, WebSocket, and HTTP](docs/comparison.md)
+- [Architecture, ACK retry, and defensive boundaries](docs/architecture.md)
+- [Actual GitHub adoption counters and analytics limits](docs/adoption-analytics.md)
+- [Transport support, including Bluetooth boundaries](docs/transports.md)
 
-## Contributing
+Measured loopback results are software baselines, not invented Wi-Fi or hardware
+claims. Hardware field reports are welcome through the
+[compatibility process](docs/compatibility.md).
 
-Student contributions are welcome. Good first tasks are labeled in the issue
-tracker, and every feature should include tests or a reproducible hardware test
-report. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[code of conduct](CODE_OF_CONDUCT.md) before opening a pull request.
+## Learn and build
 
-## Security
+- [Tutorials](docs/tutorials.md)
+- [CLI reference](docs/cli.md)
+- [Linux/Raspberry Pi service guide](docs/linux-service.md)
+- [Getting started](docs/getting-started.md)
+- [Development tips](docs/tips.md)
+- [Security guide](docs/security.md)
+- [ONP/1 protocol specification](docs/protocol.md)
+- [Contributing](CONTRIBUTING.md)
 
-CRC detects accidental corruption; it is not encryption or authentication. Use TLS
-on untrusted networks. See [SECURITY.md](SECURITY.md) for the threat model and
-private reporting instructions.
-
-## License
-
-OpenNet is available under the [MIT License](LICENSE).
+Student contributions are welcome. Good changes include a reproducible test,
+clear documentation, or a complete compatibility report. OpenNet follows
+[Semantic Versioning](https://semver.org/) and is licensed under the
+[MIT License](LICENSE).
