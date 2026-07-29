@@ -1,7 +1,7 @@
 {
   "name": "OpenNet",
-  "version": "0.1.1",
-  "description": "Typed ONP/1 messaging over TCP/TLS and reliable Arduino streams.",
+  "version": "0.2.0",
+  "description": "Direct typed ONP/1 messaging between ESP32 devices and Python hosts.",
   "keywords": ["esp32", "raspberry-pi", "iot", "tcp", "tls", "bluetooth", "messaging"],
   "repository": {
     "type": "git",

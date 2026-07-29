@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import ssl
-from collections import deque
 from types import TracebackType
-from typing import Any, AsyncIterator, Deque, Optional, Type
+from typing import Any, AsyncIterator, Optional, Type
 
 from .protocol import (
     DEFAULT_MAX_PAYLOAD,
@@ -16,6 +15,9 @@ from .protocol import (
     Frame,
     FrameKind,
     ProtocolError,
+    ReceiveQueueFull,
+    RemoteError,
+    ValueType,
     encode_value,
 )
 from .stream import read_frame, write_frame
@@ -33,13 +35,14 @@ class OpenNetClient:
         max_payload: int = DEFAULT_MAX_PAYLOAD,
         ack_timeout: float = 5.0,
         connect_timeout: float = 10.0,
+        write_timeout: float = 5.0,
         receive_queue_size: int = 256,
     ) -> None:
         if not 1 <= port <= 65535:
             raise ValueError("port must be between 1 and 65535")
         if max_payload < 0:
             raise ValueError("max_payload must be non-negative")
-        if ack_timeout <= 0 or connect_timeout <= 0:
+        if ack_timeout <= 0 or connect_timeout <= 0 or write_timeout <= 0:
             raise ValueError("timeouts must be positive")
         if receive_queue_size <= 0:
             raise ValueError("receive_queue_size must be positive")
@@ -49,12 +52,13 @@ class OpenNetClient:
         self.max_payload = max_payload
         self.ack_timeout = ack_timeout
         self.connect_timeout = connect_timeout
+        self.write_timeout = write_timeout
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
         self._next_id = 1
         self._pending: dict[int, asyncio.Future[None]] = {}
         self._messages: asyncio.Queue[Frame] = asyncio.Queue(maxsize=receive_queue_size)
-        self._backlog: Deque[Frame] = deque()
+        self._pong_waiters: list[asyncio.Future[None]] = []
         self._reader_task: Optional[asyncio.Task[None]] = None
         self._closed_event = asyncio.Event()
         self._reader_error: Optional[BaseException] = None
@@ -84,7 +88,7 @@ class OpenNetClient:
         if writer is None:
             return
         with contextlib.suppress(Exception):
-            await write_frame(writer, Frame(FrameKind.CLOSE), self.max_payload)
+            await self._write_frame(writer, Frame(FrameKind.CLOSE))
         writer.close()
         with contextlib.suppress(Exception):
             await writer.wait_closed()
@@ -128,7 +132,7 @@ class OpenNetClient:
                 frame = Frame(
                     FrameKind.DATA, value_type, topic, payload, message_id, flags
                 )
-                await write_frame(writer, frame, self.max_payload)
+                await self._write_frame(writer, frame)
                 if future is None:
                     return message_id
                 try:
@@ -148,8 +152,6 @@ class OpenNetClient:
         raise AssertionError("unreachable")
 
     async def receive(self, timeout: Optional[float] = None) -> Frame:
-        if self._backlog:
-            return self._backlog.popleft()
         if self._closed_event.is_set() and self._messages.empty():
             raise self._connection_error()
 
@@ -174,23 +176,21 @@ class OpenNetClient:
                     task.cancel()
 
     async def messages(self) -> AsyncIterator[Frame]:
-        while self.connected or self._backlog or not self._messages.empty():
+        while self.connected or not self._messages.empty():
             yield await self.receive()
 
     async def ping(self, timeout: float = 5.0) -> None:
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         writer = self._require_writer()
-        await write_frame(writer, Frame(FrameKind.PING), self.max_payload)
-        deadline = asyncio.get_running_loop().time() + timeout
-        while True:
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise asyncio.TimeoutError
-            frame = await self.receive(remaining)
-            if frame.kind is FrameKind.PONG:
-                return
-            self._backlog.append(frame)
+        waiter: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._pong_waiters.append(waiter)
+        try:
+            await self._write_frame(writer, Frame(FrameKind.PING))
+            await asyncio.wait_for(asyncio.shield(waiter), timeout)
+        finally:
+            if waiter in self._pong_waiters:
+                self._pong_waiters.remove(waiter)
 
     async def __aenter__(self) -> "OpenNetClient":
         await self.connect()
@@ -210,7 +210,12 @@ class OpenNetClient:
         return self._writer
 
     def _next_message_id(self) -> int:
-        message_id = self._next_id
+        start = self._next_id
+        message_id = start
+        while message_id in self._pending:
+            message_id = 1 if message_id == 0xFFFFFFFF else message_id + 1
+            if message_id == start:
+                raise RuntimeError("all ONP/1 message IDs are pending")
         self._next_id = 1 if message_id == 0xFFFFFFFF else message_id + 1
         return message_id
 
@@ -224,15 +229,46 @@ class OpenNetClient:
                     if future is not None and not future.done():
                         future.set_result(None)
                 elif frame.kind is FrameKind.PING:
-                    await write_frame(self._writer, Frame(FrameKind.PONG), self.max_payload)
+                    await self._write_frame(self._writer, Frame(FrameKind.PONG))
+                elif frame.kind is FrameKind.PONG:
+                    if self._pong_waiters:
+                        waiter = self._pong_waiters.pop(0)
+                        if not waiter.done():
+                            waiter.set_result(None)
                 elif frame.kind is FrameKind.CLOSE:
                     return
-                else:
-                    await self._messages.put(frame)
-        except (asyncio.IncompleteReadError, ConnectionError, ProtocolError) as exc:
+                elif frame.kind is FrameKind.ERROR:
+                    reason = frame.payload.decode("utf-8", errors="replace")
+                    raise RemoteError(reason or "unspecified error")
+                elif frame.kind is FrameKind.DATA:
+                    try:
+                        self._messages.put_nowait(frame)
+                    except asyncio.QueueFull:
+                        with contextlib.suppress(Exception):
+                            await self._write_frame(
+                                self._writer,
+                                Frame(
+                                    FrameKind.ERROR,
+                                    value_type=ValueType.UTF8,
+                                    payload=b"receive queue full",
+                                ),
+                            )
+                        raise ReceiveQueueFull(
+                            "OpenNet receive queue is full"
+                        ) from None
+        except (
+            asyncio.IncompleteReadError,
+            asyncio.TimeoutError,
+            ConnectionError,
+            ProtocolError,
+        ) as exc:
             self._reader_error = exc
             self._fail_pending(exc)
         finally:
+            if self._reader_error is None:
+                self._reader_error = ConnectionError("OpenNet peer closed")
+            self._fail_pending(self._reader_error)
+            self._fail_pings(self._reader_error)
             if self._writer is not None:
                 self._writer.close()
             self._closed_event.set()
@@ -248,3 +284,17 @@ class OpenNetClient:
         error = ConnectionError("OpenNet connection closed")
         error.__cause__ = self._reader_error
         return error
+
+    async def _write_frame(
+        self, writer: asyncio.StreamWriter, frame: Frame
+    ) -> None:
+        await asyncio.wait_for(
+            write_frame(writer, frame, self.max_payload),
+            timeout=self.write_timeout,
+        )
+
+    def _fail_pings(self, exc: BaseException) -> None:
+        for waiter in self._pong_waiters:
+            if not waiter.done():
+                waiter.set_exception(exc)
+        self._pong_waiters.clear()

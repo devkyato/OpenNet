@@ -10,7 +10,15 @@ opennet serve [--host HOST] [--port PORT] [--echo]
 
 Useful controls include `--max-payload`, `--max-connections`,
 `--deduplication-window`, `--tls-cert`, `--tls-key`, and `--tls-client-ca`.
-Remote plaintext listeners require `--allow-plaintext`.
+Remote plaintext listeners require `--allow-plaintext`. Logs contain message
+metadata and payload size by default; `--log-values` is an explicit
+secret-exposure opt-in.
+
+Repeat `--allow-topic-prefix PREFIX` to apply one shared allowlist to every
+client. For example, `--allow-topic-prefix sensor/ --allow-topic-prefix status/`
+rejects other topics before the handler and ACK. This simple CLI policy does not
+map individual certificates to different topics. Use the Python
+`OpenNetServer` `authorizer` API for identity-specific rules.
 
 ## Send
 
@@ -21,6 +29,8 @@ opennet send TOPIC [VALUE] [--type TYPE]
 Types are `text`, `json`, `int`, `float`, `bool`, `null`, `hex`, and `file`.
 The command waits for an ACK by default and retries twice. Adjust with
 `--retries`, `--retry-delay`, `--ack-timeout`, or `--no-ack`.
+For `--type file`, the CLI checks the file size against `--max-payload` before
+reading it.
 
 Examples:
 
@@ -39,7 +49,10 @@ opennet benchmark --count 1000 --warmup 25 --payload-size 1024 --json
 ```
 
 Both commands measure complete ONP round trips rather than ICMP. `benchmark`
-uses acknowledged binary DATA frames.
+uses one sequential acknowledged binary DATA frame at a time. Its
+`messages_per_second` value is the reciprocal of those sampled round trips, not
+maximum concurrent throughput; JSON output labels the mode
+`sequential_acknowledged`.
 
 ## Connection and TLS options
 

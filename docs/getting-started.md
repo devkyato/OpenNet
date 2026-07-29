@@ -6,6 +6,10 @@ One machine listens as the server; other devices connect as clients. On a home o
 lab network, a Raspberry Pi is a convenient always-on server. OpenNet does not
 bypass routers, firewalls, captive portals, or internet service outages.
 
+I like starting on loopback first because it separates application mistakes from
+Wi-Fi, certificates, and firewall rules. Once that works, move the exact same
+ONP/1 messages onto the real transport.
+
 ## Raspberry Pi or backend server
 
 OpenNet supports Python 3.9 or newer on operating systems supported by Python.
@@ -14,7 +18,7 @@ supported Python version.
 
 ```bash
 python -m pip install \
-  https://github.com/devkyato/OpenNet/releases/download/v0.1.1/opennet_protocol-0.1.1-py3-none-any.whl
+  https://github.com/devkyato/OpenNet/releases/download/v0.2.0/opennet_protocol-0.2.0-py3-none-any.whl
 opennet serve
 ```
 
@@ -48,7 +52,7 @@ For another project:
 
 ```ini
 lib_deps =
-  https://github.com/devkyato/OpenNet.git#v0.1.1
+  https://github.com/devkyato/OpenNet.git#v0.2.0
 ```
 
 ## Sending values
@@ -68,4 +72,6 @@ Validate incoming JSON against an application schema and bound binary payload si
 for the receiving device.
 
 Continue with the [step-by-step tutorials](tutorials.md) and
-[development tips](tips.md).
+[development tips](tips.md). When a server accepts more than one device, add
+[topic authorization](authorization.md) instead of treating a valid certificate
+as permission to use every topic.

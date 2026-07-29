@@ -6,9 +6,9 @@ library `venv` module.
 ## Install
 
 ```sh
-grep 'OpenNet-linux-0.1.1.tar.gz' SHA256SUMS | sha256sum -c -
-tar -xzf OpenNet-linux-0.1.1.tar.gz
-cd OpenNet-linux-0.1.1
+grep 'OpenNet-linux-0.2.0.tar.gz' SHA256SUMS | sha256sum -c -
+tar -xzf OpenNet-linux-0.2.0.tar.gz
+cd OpenNet-linux-0.2.0
 sudo ./install.sh
 ```
 

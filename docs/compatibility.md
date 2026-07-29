@@ -14,6 +14,10 @@
 supported CPython version and provide the chosen connection. It does not imply
 that every historical Pi image, radio, or adapter has been physically tested.
 
+The v0.2.0 authorization callback and TLS peer-certificate properties are Python
+server features. They do not change ONP/1 compatibility and do not imply that
+the Arduino client performs server-side policy enforcement.
+
 ## Not claimed
 
 - ESP8266, RP2040/Pico W, Arduino UNO WiFi, or non-ESP32 Arduino boards.

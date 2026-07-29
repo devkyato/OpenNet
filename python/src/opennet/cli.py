@@ -13,7 +13,7 @@ import statistics
 import sys
 import time
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from . import __version__
 from .client import OpenNetClient
@@ -43,6 +43,7 @@ def _add_connection_options(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--connect-timeout", type=float, default=10.0)
     parser.add_argument("--ack-timeout", type=float, default=5.0)
+    parser.add_argument("--max-payload", type=int, default=DEFAULT_MAX_PAYLOAD)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -73,6 +74,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve.add_argument(
         "--echo", action="store_true", help="send each accepted value back to its peer"
+    )
+    serve.add_argument(
+        "--log-values",
+        action="store_true",
+        help="include decoded payload values in logs (may expose sensitive data)",
+    )
+    serve.add_argument(
+        "--allow-topic-prefix",
+        action="append",
+        default=[],
+        metavar="PREFIX",
+        help="accept only topics with this prefix; repeat to allow more prefixes",
     )
 
     send = commands.add_parser("send", help="send one typed value and await its ACK")
@@ -163,6 +176,7 @@ def _client(args: argparse.Namespace) -> OpenNetClient:
         ssl_context=ssl_context,
         connect_timeout=args.connect_timeout,
         ack_timeout=args.ack_timeout,
+        max_payload=args.max_payload,
     )
 
 
@@ -190,8 +204,38 @@ def _value_from_args(args: argparse.Namespace) -> Any:
     if args.type == "hex":
         return bytes.fromhex(value)
     if args.type == "file":
-        return Path(value).read_bytes()
+        path = Path(value)
+        file_size = path.stat().st_size
+        if file_size > args.max_payload:
+            raise ValueError(
+                f"file is {file_size} bytes; --max-payload is {args.max_payload}"
+            )
+        return path.read_bytes()
     raise AssertionError(f"unhandled value type {args.type}")
+
+
+def _topic_prefix_authorizer(
+    prefixes: Sequence[str],
+) -> Callable[[Peer, Frame], bool] | None:
+    if not prefixes:
+        return None
+    if any(not prefix for prefix in prefixes):
+        raise ValueError("--allow-topic-prefix cannot be empty")
+    allowed = tuple(prefixes)
+    return lambda _peer, frame: frame.topic.startswith(allowed)
+
+
+def _frame_log_fields(frame: Frame, *, include_value: bool) -> dict[str, Any]:
+    fields: dict[str, Any] = {
+        "id": frame.message_id,
+        "topic": frame.topic,
+        "value_type": frame.value_type.name.lower(),
+        "payload_bytes": len(frame.payload),
+    }
+    if include_value:
+        value = decode_value(frame.value_type, frame.payload)
+        fields["value"] = value.hex() if isinstance(value, bytes) else value
+    return fields
 
 
 def _percentile(values: list[float], fraction: float) -> float:
@@ -223,24 +267,19 @@ async def _serve(args: argparse.Namespace) -> None:
 
     async def log_message(peer: Peer, frame: Frame) -> None:
         nonlocal next_server_message_id
-        value = decode_value(frame.value_type, frame.payload)
-        summary = (
-            {"bytes": len(value)} if isinstance(value, bytes) else {"value": value}
-        )
         logging.info(
             "%s",
             json.dumps(
                 {
                     "peer": str(peer.address),
-                    "id": frame.message_id,
-                    "topic": frame.topic,
-                    **summary,
+                    **_frame_log_fields(frame, include_value=args.log_values),
                 },
                 ensure_ascii=False,
                 default=str,
             ),
         )
         if args.echo:
+            value = decode_value(frame.value_type, frame.payload)
             await peer.send_value(frame.topic, value, next_server_message_id)
             next_server_message_id = (
                 1 if next_server_message_id == 0xFFFFFFFF else next_server_message_id + 1
@@ -256,6 +295,7 @@ async def _serve(args: argparse.Namespace) -> None:
         max_payload=args.max_payload,
         max_connections=args.max_connections,
         deduplication_window=args.deduplication_window,
+        authorizer=_topic_prefix_authorizer(args.allow_topic_prefix),
     )
     await server.start()
     bound = ", ".join(str(sock.getsockname()) for sock in server.sockets)
@@ -316,7 +356,10 @@ async def _benchmark(args: argparse.Namespace) -> None:
                 "_opennet/benchmark", payload, retries=args.retries, retry_delay=0
             )
             samples.append((time.perf_counter() - started) * 1000)
-    metrics = _metrics(samples, args.payload_size)
+    metrics: dict[str, float | int | str] = {
+        "mode": "sequential_acknowledged",
+        **_metrics(samples, args.payload_size),
+    }
     if args.json_output:
         print(json.dumps(metrics, sort_keys=True))
     else:

@@ -37,6 +37,11 @@ For mutual TLS, add `--tls-client-ca devices-ca.crt` to the server and
 `--cert device.crt --key device.key` to the client. Issue a distinct certificate
 per device so one device can be revoked without replacing every key.
 
+Oh! Mutual TLS identifies a certificate, but it does not decide which topics
+that certificate may use. Python servers can attach an `authorizer` that checks
+the verified certificate and topic before the handler or ACK. The complete
+example is in [Authorizing topics](authorization.md).
+
 ## Application responsibilities
 
 - Authorize which device may publish or receive each topic.
@@ -46,11 +51,14 @@ per device so one device can be revoked without replacing every key.
 - Persist operation IDs when duplicate physical actions would be dangerous.
 - Rate-limit expensive handlers and monitor `ServerStats`.
 - Keep payload and connection limits appropriate for available RAM and CPU.
+- Configure idle, incomplete-frame, TLS-handshake, and write timeouts for the
+  deployment rather than allowing slots to remain occupied indefinitely.
 
 ## Current limits
 
-ONP/1 has no message-level signature or session authorization handshake.
-TLS protects network streams, but a peer with an accepted certificate can still
-send any topic unless the application checks it. Bluetooth pairing is not a
-replacement for application authorization. OpenNet has not been independently
-audited or certified.
+ONP/1 has no message-level signature or session authorization handshake. TLS
+protects network streams, and the optional Python authorizer provides a place
+for application policy, but OpenNet does not invent that policy. Without an
+authorizer or handler-level checks, a peer with an accepted certificate can send
+any topic. Bluetooth pairing is not a replacement for application
+authorization. OpenNet has not been independently audited or certified.

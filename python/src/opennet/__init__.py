@@ -7,13 +7,16 @@ from .protocol import (
     Frame,
     FrameKind,
     ProtocolError,
+    ReceiveQueueFull,
+    RemoteError,
     ValueType,
     decode_value,
     encode_value,
 )
-from .server import OpenNetServer, Peer, ServerStats
+from .server import Authorizer, OpenNetServer, Peer, ServerStats
 
 __all__ = [
+    "Authorizer",
     "DeliveryTimeout",
     "Flags",
     "Frame",
@@ -22,10 +25,12 @@ __all__ = [
     "OpenNetServer",
     "Peer",
     "ProtocolError",
+    "ReceiveQueueFull",
+    "RemoteError",
     "ServerStats",
     "ValueType",
     "decode_value",
     "encode_value",
 ]
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"

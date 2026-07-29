@@ -1,7 +1,9 @@
 # Protocol comparison
 
-OpenNet is a direct typed messaging option, not a universal replacement for
-established web or broker protocols.
+OpenNet is a direct typed messaging option for embedded-to-host links, not a
+universal replacement for established web or broker protocols. Its most natural
+shape is an ESP32 or similar embedded peer exchanging small typed messages with
+a Raspberry Pi or Python service.
 
 | Capability | OpenNet ONP/1 | Raw TCP | MQTT 5 | WebSocket | HTTP |
 |---|---|---|---|---|---|
@@ -33,6 +35,8 @@ represent as one honest number.
 
 ## Choosing deliberately
 
+- Choose **nothing new** when an existing protocol already fits the system and
+  its operational cost is acceptable.
 - Choose **MQTT** when you need a broker, retained messages, subscriptions, or
   standardized QoS across a device fleet.
 - Choose **WebSocket** when browser support is central.
@@ -40,8 +44,16 @@ represent as one honest number.
   matter more than a compact persistent channel.
 - Choose **raw TCP** when you are prepared to design, test, and maintain every
   application framing and typing rule.
+- Choose **UDP** when datagram semantics and application-controlled loss behavior
+  are requirements; raw UDP cannot be passed directly to ONP/1.
 - Choose **OpenNet** for direct, dependency-light typed messages shared by ESP32
   and Python code, with a small API and documented frame format.
+
+That last choice is intentionally narrow. ONP/1 is useful when learning or
+building the communication boundary itself is part of the project: framing,
+byte order, validation, retries, duplicate handling, resource limits, and TLS
+remain visible rather than disappearing behind a broker. It is not a reason to
+replace a working MQTT or HTTP deployment.
 
 Primary specifications: [MQTT 5.0 (OASIS)](https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html),
 [WebSocket RFC 6455](https://www.rfc-editor.org/rfc/rfc6455.html), and

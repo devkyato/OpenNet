@@ -7,6 +7,11 @@ than a broker protocol: peers establish a reliable byte stream (normally TCP or
 TLS), exchange frames, and decide at the application layer which topics are
 allowed.
 
+A transport must preserve every byte in order for the lifetime of the
+connection. Datagram loss, reordering, fragmentation, and session semantics are
+outside ONP/1. An adapter for a datagram transport must satisfy the stream
+contract before passing bytes to this protocol.
+
 ## Byte order and limits
 
 All multibyte integers and floating-point values use network byte order (big
@@ -29,7 +34,7 @@ The fixed header is 24 bytes:
 | 8 | 4 | message ID | unsigned, non-zero for DATA |
 | 12 | 4 | payload length | application payload bytes |
 | 16 | 4 | CRC-32 | CRC of topic bytes followed by payload bytes |
-| 20 | 4 | reserved | must be zero; ignore when receiving |
+| 20 | 4 | reserved | senders MUST emit zero; version-1 receivers MUST ignore |
 
 The header is followed by `topic length` bytes and then `payload length` bytes.
 Topics must be valid UTF-8, between 1 and 1024 bytes for DATA frames, and use `/`
@@ -46,7 +51,10 @@ as an optional hierarchy separator.
 | 5 | CLOSE | optional UTF-8 reason |
 | 6 | ERROR | UTF-8 diagnostic; must not contain secrets |
 
-Unknown frame kinds must produce ERROR and close the connection. A peer receiving
+When a receiver can safely trust the frame boundary, an unsupported frame kind
+should produce ERROR and close the connection. A receiver may close immediately
+when the magic, version, kind, lengths, or other framing fields are invalid
+enough that continuing or writing a response would be unsafe. A peer receiving
 PING should promptly return PONG.
 
 ## Flags
@@ -55,9 +63,16 @@ PING should promptly return PONG.
 - Bit 1 (`0x02`), `DUPLICATE`: retransmission of the same message ID.
 - Bits 2–7 are reserved and must be zero when sending.
 
-ACK confirms that the receiver parsed and accepted the frame, not that application
-side effects completed. Message IDs are scoped to one connection. Receivers should
-deduplicate repeated IDs for the duration of the connection.
+ACK confirms transport-level acceptance. For DATA, acceptance means that the
+receiver validated the complete frame, applied configured limits and
+authorization, and admitted the message ID to its bounded duplicate window. The
+ACK is sent before application handler completion. It does not prove that a
+handler started, succeeded, persisted data, or completed a physical side effect.
+
+Message IDs are scoped to one connection. Receivers should deduplicate repeated
+IDs for the duration of the connection. A repeated accepted ID receives an ACK
+with `DUPLICATE`; its handler is not run again inside the retained live-connection
+window.
 
 ## Value types
 
@@ -65,7 +80,7 @@ deduplicate repeated IDs for the duration of the connection.
 |---:|---|---|
 | 0 | BYTES | uninterpreted bytes |
 | 1 | UTF8 | valid UTF-8 |
-| 2 | JSON | UTF-8 JSON value |
+| 2 | JSON | Strict UTF-8 JSON value; maximum nesting depth 32 |
 | 3 | INT64 | signed 64-bit integer |
 | 4 | FLOAT64 | IEEE-754 binary64 |
 | 5 | BOOL | exactly one byte: `0x00` or `0x01` |
@@ -73,6 +88,11 @@ deduplicate repeated IDs for the duration of the connection.
 
 Kind-specific control payloads use the encoding described in the frame-kind table,
 regardless of the value-type byte.
+
+UTF-8 validation applies to DATA topics, UTF8 and JSON values, and non-empty
+CLOSE and ERROR reasons. JSON uses the RFC 8259 grammar: `NaN`, `Infinity`,
+trailing commas, invalid escapes, and lone UTF-16 surrogate escapes are invalid.
+Receivers reject JSON nesting deeper than 32 arrays/objects before delivery.
 
 ## CRC
 
@@ -94,8 +114,20 @@ confidentiality, peer authentication, and tamper resistance.
 5. Reconnect with exponential backoff and jitter. Application code decides whether
    to replay unacknowledged messages.
 
+Implementations should bound idle time, incomplete-header time, incomplete-body
+time, TLS handshake time, and writes. These are local transport policies rather
+than ONP/1 fields. When an application receive queue or handler dispatcher is
+full, a receiver must apply an explicit bounded policy; it must not allow DATA
+backpressure to prevent ACK, PING, PONG, CLOSE, or ERROR processing indefinitely.
+
 ## Compatibility
 
-Senders must use version 1. A version-1 receiver must ignore non-zero reserved
-header bytes for forward compatibility but reject reserved flag bits. New value
-types or frame kinds require a protocol revision or an extension specification.
+Senders must use version 1 and emit zero in the reserved 32-bit header field. A
+version-1 receiver must ignore that field even when it is non-zero; it does not
+alter parsing. Reserved flag bits remain invalid. New value types or frame kinds
+require a protocol revision or an extension specification.
+
+OpenNet v0.2.0 adds an optional Python server authorization callback without
+changing the ONP/1 frame, kinds, flags, types, or connection lifecycle. A denied
+DATA frame receives the existing ERROR control frame and the connection closes;
+it is not acknowledged.
