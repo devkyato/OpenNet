@@ -1,0 +1,30 @@
+[Unit]
+Description=OpenNet ONP/1 service
+Documentation=https://github.com/devkyato/OpenNet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opennet
+Group=opennet
+EnvironmentFile=-/etc/opennet/opennet.env
+ExecStart=/opt/opennet/venv/bin/opennet serve
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
