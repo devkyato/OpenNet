@@ -1,4 +1,6 @@
+import re
 import struct
+from pathlib import Path
 
 import pytest
 
@@ -156,3 +158,35 @@ def test_received_data_payload_must_match_declared_type():
 def test_json_rejects_non_standard_numeric_constants(constant):
     with pytest.raises(ProtocolError, match="non-standard JSON"):
         decode_value(ValueType.JSON, constant)
+
+
+def test_json_nesting_is_bounded():
+    depth_32 = b"[" * 32 + b"0" + b"]" * 32
+    depth_33 = b"[" * 33 + b"0" + b"]" * 33
+    assert decode_value(ValueType.JSON, depth_32)
+    with pytest.raises(ProtocolError, match="nesting"):
+        decode_value(ValueType.JSON, depth_33)
+
+
+def test_shared_python_arduino_conformance_vectors():
+    vectors = (
+        Path(__file__).resolve().parents[2]
+        / "test"
+        / "vectors"
+        / "onp1_vectors.inc"
+    ).read_text(encoding="utf-8")
+    pattern = re.compile(
+        r'ONP_VECTOR\((\w+), (true|false), "([0-9a-f]+)"\)'
+    )
+    parsed = pattern.findall(vectors)
+    assert parsed
+    for name, accepted_text, encoded_hex in parsed:
+        encoded = bytes.fromhex(encoded_hex)
+        topic_length, payload_length = inspect_header(encoded[: HEADER.size])
+        body = encoded[HEADER.size : HEADER.size + topic_length + payload_length]
+        if accepted_text == "true":
+            assert Frame.from_parts(encoded[: HEADER.size], body)
+        else:
+            with pytest.raises(ProtocolError, match=".*") as result:
+                Frame.from_parts(encoded[: HEADER.size], body)
+            assert result.value, name

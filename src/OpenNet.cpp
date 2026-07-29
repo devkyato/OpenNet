@@ -4,6 +4,315 @@
 #include <cstring>
 #include <utility>
 
+namespace {
+
+bool isContinuation(uint8_t byte) { return (byte & 0xC0u) == 0x80u; }
+
+bool validUtf8(const uint8_t* data, size_t length) {
+  size_t index = 0;
+  while (index < length) {
+    const uint8_t first = data[index++];
+    if (first <= 0x7Fu) {
+      continue;
+    }
+    if (first >= 0xC2u && first <= 0xDFu) {
+      if (index >= length || !isContinuation(data[index++])) {
+        return false;
+      }
+      continue;
+    }
+    if (first >= 0xE0u && first <= 0xEFu) {
+      if (index + 1 >= length) {
+        return false;
+      }
+      const uint8_t second = data[index++];
+      const uint8_t third = data[index++];
+      if (!isContinuation(third) ||
+          (first == 0xE0u && (second < 0xA0u || second > 0xBFu)) ||
+          (first == 0xEDu && (second < 0x80u || second > 0x9Fu)) ||
+          (first != 0xE0u && first != 0xEDu &&
+           !isContinuation(second))) {
+        return false;
+      }
+      continue;
+    }
+    if (first >= 0xF0u && first <= 0xF4u) {
+      if (index + 2 >= length) {
+        return false;
+      }
+      const uint8_t second = data[index++];
+      const uint8_t third = data[index++];
+      const uint8_t fourth = data[index++];
+      if (!isContinuation(third) || !isContinuation(fourth) ||
+          (first == 0xF0u && (second < 0x90u || second > 0xBFu)) ||
+          (first == 0xF4u && (second < 0x80u || second > 0x8Fu)) ||
+          (first != 0xF0u && first != 0xF4u &&
+           !isContinuation(second))) {
+        return false;
+      }
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+class JsonValidator {
+ public:
+  JsonValidator(const uint8_t* data, size_t length)
+      : data_(data), length_(length), position_(0) {}
+
+  bool validate() {
+    skipWhitespace();
+    if (!parseValue(0)) {
+      return false;
+    }
+    skipWhitespace();
+    return position_ == length_;
+  }
+
+ private:
+  static constexpr uint8_t kMaxDepth = 32;
+
+  const uint8_t* data_;
+  size_t length_;
+  size_t position_;
+
+  void skipWhitespace() {
+    while (position_ < length_ &&
+           (data_[position_] == ' ' || data_[position_] == '\t' ||
+            data_[position_] == '\r' || data_[position_] == '\n')) {
+      ++position_;
+    }
+  }
+
+  bool consume(char expected) {
+    if (position_ >= length_ ||
+        data_[position_] != static_cast<uint8_t>(expected)) {
+      return false;
+    }
+    ++position_;
+    return true;
+  }
+
+  bool consumeLiteral(const char* literal) {
+    for (size_t index = 0; literal[index] != '\0'; ++index) {
+      if (!consume(literal[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool parseValue(uint8_t depth) {
+    if (position_ >= length_) {
+      return false;
+    }
+    switch (data_[position_]) {
+      case '"':
+        return parseString();
+      case '{':
+        return parseObject(depth);
+      case '[':
+        return parseArray(depth);
+      case 't':
+        return consumeLiteral("true");
+      case 'f':
+        return consumeLiteral("false");
+      case 'n':
+        return consumeLiteral("null");
+      default:
+        return parseNumber();
+    }
+  }
+
+  bool parseObject(uint8_t depth) {
+    if (depth >= kMaxDepth || !consume('{')) {
+      return false;
+    }
+    skipWhitespace();
+    if (consume('}')) {
+      return true;
+    }
+    while (true) {
+      if (!parseString()) {
+        return false;
+      }
+      skipWhitespace();
+      if (!consume(':')) {
+        return false;
+      }
+      skipWhitespace();
+      if (!parseValue(static_cast<uint8_t>(depth + 1))) {
+        return false;
+      }
+      skipWhitespace();
+      if (consume('}')) {
+        return true;
+      }
+      if (!consume(',')) {
+        return false;
+      }
+      skipWhitespace();
+    }
+  }
+
+  bool parseArray(uint8_t depth) {
+    if (depth >= kMaxDepth || !consume('[')) {
+      return false;
+    }
+    skipWhitespace();
+    if (consume(']')) {
+      return true;
+    }
+    while (true) {
+      if (!parseValue(static_cast<uint8_t>(depth + 1))) {
+        return false;
+      }
+      skipWhitespace();
+      if (consume(']')) {
+        return true;
+      }
+      if (!consume(',')) {
+        return false;
+      }
+      skipWhitespace();
+    }
+  }
+
+  static bool isHex(uint8_t byte) {
+    return (byte >= '0' && byte <= '9') ||
+           (byte >= 'a' && byte <= 'f') ||
+           (byte >= 'A' && byte <= 'F');
+  }
+
+  static uint16_t hexValue(uint8_t byte) {
+    if (byte >= '0' && byte <= '9') {
+      return static_cast<uint16_t>(byte - '0');
+    }
+    if (byte >= 'a' && byte <= 'f') {
+      return static_cast<uint16_t>(byte - 'a' + 10);
+    }
+    return static_cast<uint16_t>(byte - 'A' + 10);
+  }
+
+  bool parseHexEscape(uint16_t& value) {
+    if (position_ + 4 > length_) {
+      return false;
+    }
+    value = 0;
+    for (uint8_t index = 0; index < 4; ++index) {
+      const uint8_t byte = data_[position_++];
+      if (!isHex(byte)) {
+        return false;
+      }
+      value = static_cast<uint16_t>((value << 4) | hexValue(byte));
+    }
+    return true;
+  }
+
+  bool parseString() {
+    if (!consume('"')) {
+      return false;
+    }
+    while (position_ < length_) {
+      const uint8_t byte = data_[position_++];
+      if (byte == '"') {
+        return true;
+      }
+      if (byte < 0x20u) {
+        return false;
+      }
+      if (byte != '\\') {
+        continue;
+      }
+      if (position_ >= length_) {
+        return false;
+      }
+      const uint8_t escape = data_[position_++];
+      if (escape == '"' || escape == '\\' || escape == '/' ||
+          escape == 'b' || escape == 'f' || escape == 'n' ||
+          escape == 'r' || escape == 't') {
+        continue;
+      }
+      if (escape != 'u') {
+        return false;
+      }
+      uint16_t code = 0;
+      if (!parseHexEscape(code)) {
+        return false;
+      }
+      if (code >= 0xD800u && code <= 0xDBFFu) {
+        if (!consume('\\') || !consume('u')) {
+          return false;
+        }
+        uint16_t low = 0;
+        if (!parseHexEscape(low) || low < 0xDC00u || low > 0xDFFFu) {
+          return false;
+        }
+      } else if (code >= 0xDC00u && code <= 0xDFFFu) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  bool parseDigits() {
+    const size_t start = position_;
+    while (position_ < length_ && data_[position_] >= '0' &&
+           data_[position_] <= '9') {
+      ++position_;
+    }
+    return position_ > start;
+  }
+
+  bool parseNumber() {
+    if (position_ < length_ && data_[position_] == '-') {
+      ++position_;
+    }
+    if (position_ >= length_) {
+      return false;
+    }
+    if (data_[position_] == '0') {
+      ++position_;
+      if (position_ < length_ && data_[position_] >= '0' &&
+          data_[position_] <= '9') {
+        return false;
+      }
+    } else if (data_[position_] >= '1' && data_[position_] <= '9') {
+      if (!parseDigits()) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+    if (position_ < length_ && data_[position_] == '.') {
+      ++position_;
+      if (!parseDigits()) {
+        return false;
+      }
+    }
+    if (position_ < length_ &&
+        (data_[position_] == 'e' || data_[position_] == 'E')) {
+      ++position_;
+      if (position_ < length_ &&
+          (data_[position_] == '+' || data_[position_] == '-')) {
+        ++position_;
+      }
+      if (!parseDigits()) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
+bool validJson(const uint8_t* data, size_t length) {
+  return validUtf8(data, length) && JsonValidator(data, length).validate();
+}
+
+}  // namespace
+
 String OpenNetMessage::text() const {
   if (valueType != OpenNetValueType::Utf8 &&
       valueType != OpenNetValueType::Json) {
@@ -381,7 +690,30 @@ void OpenNetClient::handleFrame() {
   }
 
   const auto kind = static_cast<OpenNetFrameKind>(header_[3]);
+  const auto valueType = static_cast<OpenNetValueType>(header_[5]);
   const uint32_t messageId = readU32(header_ + 8);
+  if (kind == OpenNetFrameKind::Data &&
+      !validUtf8(topicBytes, expectedTopicLength_)) {
+    lastError_ = OpenNetError::InvalidFrame;
+    stopTransport();
+    return;
+  }
+  if ((kind == OpenNetFrameKind::Close ||
+       kind == OpenNetFrameKind::Error ||
+       (kind == OpenNetFrameKind::Data &&
+        valueType == OpenNetValueType::Utf8)) &&
+      !validUtf8(payload, expectedPayloadLength_)) {
+    lastError_ = OpenNetError::InvalidFrame;
+    stopTransport();
+    return;
+  }
+  if (kind == OpenNetFrameKind::Data &&
+      valueType == OpenNetValueType::Json &&
+      !validJson(payload, expectedPayloadLength_)) {
+    lastError_ = OpenNetError::InvalidFrame;
+    stopTransport();
+    return;
+  }
   if (kind == OpenNetFrameKind::Ack) {
     lastAcknowledged_ = messageId;
     return;
@@ -394,7 +726,7 @@ void OpenNetClient::handleFrame() {
   if (kind != OpenNetFrameKind::Data) {
     return;
   }
-  if (static_cast<OpenNetValueType>(header_[5]) == OpenNetValueType::Bool &&
+  if (valueType == OpenNetValueType::Bool &&
       payload[0] > 1) {
     lastError_ = OpenNetError::InvalidFrame;
     stopTransport();
@@ -403,7 +735,7 @@ void OpenNetClient::handleFrame() {
 
   OpenNetMessage message;
   message.kind = kind;
-  message.valueType = static_cast<OpenNetValueType>(header_[5]);
+  message.valueType = valueType;
   message.messageId = messageId;
   message.flags = header_[4];
   message.topic.reserve(expectedTopicLength_);

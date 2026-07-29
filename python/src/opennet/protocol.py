@@ -16,6 +16,7 @@ HEADER: Final = struct.Struct("!2sBBBBHIIII")
 HEADER_SIZE: Final = HEADER.size
 MAX_TOPIC_SIZE: Final = 1024
 DEFAULT_MAX_PAYLOAD: Final = 16 * 1024 * 1024
+MAX_JSON_DEPTH: Final = 32
 
 
 class ProtocolError(ValueError):
@@ -181,6 +182,11 @@ class Frame:
         frame = cls(kind, value_type, topic, payload, message_id, Flags(raw_flags))
         if kind is FrameKind.DATA:
             decode_value(value_type, payload)
+        elif kind in (FrameKind.CLOSE, FrameKind.ERROR) and payload:
+            try:
+                payload.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ProtocolError(str(exc)) from exc
         return frame
 
 
@@ -280,10 +286,12 @@ def decode_value(value_type: ValueType, payload: bytes) -> Any:
         if value_type is ValueType.UTF8:
             return payload.decode("utf-8")
         if value_type is ValueType.JSON:
-            return json.loads(
+            value = json.loads(
                 payload.decode("utf-8"),
                 parse_constant=_reject_json_constant,
             )
+            _validate_json_depth(value)
+            return value
         if value_type is ValueType.INT64:
             if len(payload) != 8:
                 raise ProtocolError("INT64 payload must be 8 bytes")
@@ -304,3 +312,21 @@ def decode_value(value_type: ValueType, payload: bytes) -> Any:
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"non-standard JSON constant {value}")
+
+
+def _validate_json_depth(value: Any, depth: int = 0) -> None:
+    if isinstance(value, str):
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+            raise ValueError("JSON string contains a lone surrogate")
+        return
+    if isinstance(value, (list, dict)):
+        depth += 1
+        if depth > MAX_JSON_DEPTH:
+            raise ValueError(f"JSON nesting exceeds {MAX_JSON_DEPTH}")
+        if isinstance(value, dict):
+            for key, child in value.items():
+                _validate_json_depth(key, depth)
+                _validate_json_depth(child, depth)
+        else:
+            for child in value:
+                _validate_json_depth(child, depth)

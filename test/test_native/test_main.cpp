@@ -10,6 +10,18 @@
 
 namespace {
 
+struct SharedVector {
+  const char* name;
+  bool accepted;
+  const char* hex;
+};
+
+const SharedVector kSharedVectors[] = {
+#define ONP_VECTOR(name, accepted, hex) {#name, accepted, hex},
+#include "../vectors/onp1_vectors.inc"
+#undef ONP_VECTOR
+};
+
 std::vector<uint8_t> fromHex(const char* hex) {
   std::vector<uint8_t> result;
   for (std::size_t index = 0; hex[index] != '\0'; index += 2) {
@@ -173,6 +185,20 @@ void testMalformedTypedPayloadClosesTransport() {
   assert(client.lastError() == OpenNetError::InvalidFrame);
 }
 
+void testSharedConformanceVectors() {
+  for (const SharedVector& vector : kSharedVectors) {
+    FakeClient transport;
+    OpenNetClient client(transport);
+    assert(client.connect("127.0.0.1", 8765));
+    bool handled = false;
+    client.onMessage([&handled](const OpenNetMessage&) { handled = true; });
+    transport.receive(fromHex(vector.hex));
+    client.poll();
+    assert(client.connected() == vector.accepted);
+    assert(handled == vector.accepted);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -183,5 +209,6 @@ int main() {
   testOversizedDeclarationClosesTransport();
   testTypedMessageAccessors();
   testMalformedTypedPayloadClosesTransport();
+  testSharedConformanceVectors();
   return 0;
 }

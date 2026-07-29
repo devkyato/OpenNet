@@ -41,6 +41,8 @@ All notable changes are documented here. OpenNet follows
   ambiguity.
 - Python servers bound idle/header/body/TLS/write/handler waits and reject a full
   handler set explicitly.
+- Python and Arduino now share malformed UTF-8/JSON conformance vectors, enforce
+  strict text/control encoding, and bound JSON nesting to 32.
 
 ### Compatibility
 

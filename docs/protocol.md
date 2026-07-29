@@ -34,7 +34,7 @@ The fixed header is 24 bytes:
 | 8 | 4 | message ID | unsigned, non-zero for DATA |
 | 12 | 4 | payload length | application payload bytes |
 | 16 | 4 | CRC-32 | CRC of topic bytes followed by payload bytes |
-| 20 | 4 | reserved | must be zero; ignore when receiving |
+| 20 | 4 | reserved | senders MUST emit zero; version-1 receivers MUST ignore |
 
 The header is followed by `topic length` bytes and then `payload length` bytes.
 Topics must be valid UTF-8, between 1 and 1024 bytes for DATA frames, and use `/`
@@ -80,7 +80,7 @@ window.
 |---:|---|---|
 | 0 | BYTES | uninterpreted bytes |
 | 1 | UTF8 | valid UTF-8 |
-| 2 | JSON | UTF-8 JSON value |
+| 2 | JSON | Strict UTF-8 JSON value; maximum nesting depth 32 |
 | 3 | INT64 | signed 64-bit integer |
 | 4 | FLOAT64 | IEEE-754 binary64 |
 | 5 | BOOL | exactly one byte: `0x00` or `0x01` |
@@ -88,6 +88,11 @@ window.
 
 Kind-specific control payloads use the encoding described in the frame-kind table,
 regardless of the value-type byte.
+
+UTF-8 validation applies to DATA topics, UTF8 and JSON values, and non-empty
+CLOSE and ERROR reasons. JSON uses the RFC 8259 grammar: `NaN`, `Infinity`,
+trailing commas, invalid escapes, and lone UTF-16 surrogate escapes are invalid.
+Receivers reject JSON nesting deeper than 32 arrays/objects before delivery.
 
 ## CRC
 
@@ -117,9 +122,10 @@ backpressure to prevent ACK, PING, PONG, CLOSE, or ERROR processing indefinitely
 
 ## Compatibility
 
-Senders must use version 1. A version-1 receiver must ignore non-zero reserved
-header bytes for forward compatibility but reject reserved flag bits. New value
-types or frame kinds require a protocol revision or an extension specification.
+Senders must use version 1 and emit zero in the reserved 32-bit header field. A
+version-1 receiver must ignore that field even when it is non-zero; it does not
+alter parsing. Reserved flag bits remain invalid. New value types or frame kinds
+require a protocol revision or an extension specification.
 
 OpenNet v0.2.0 adds an optional Python server authorization callback without
 changing the ONP/1 frame, kinds, flags, types, or connection lifecycle. A denied
