@@ -36,6 +36,7 @@ opennet-server = "opennet.cli:server_main"
 Homepage = "https://github.com/devkyato/OpenNet"
 Documentation = "https://github.com/devkyato/OpenNet/tree/main/docs"
 Issues = "https://github.com/devkyato/OpenNet/issues"
+Changelog = "https://github.com/devkyato/OpenNet/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/opennet"]
