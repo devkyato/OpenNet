@@ -1,6 +1,6 @@
 {
   "name": "OpenNet",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Direct typed ONP/1 messaging between ESP32 devices and Python hosts.",
   "keywords": ["esp32", "raspberry-pi", "iot", "tcp", "tls", "bluetooth", "messaging"],
   "repository": {

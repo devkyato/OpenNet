@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+title: "OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends"
+authors:
+  - family-names: devkyato
+    affiliation: "MATA Company"
+version: 0.2.1
+license: MIT
+repository-code: "https://github.com/devkyato/OpenNet"
+url: "https://github.com/devkyato/OpenNet"
+abstract: "Typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends."
+keywords: [opennet, ONP/1, IoT, ESP32, Raspberry Pi, messaging, protocol, embedded, Arduino, Python]
+preferred-citation:
+  type: software
+  title: "OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends"
+  authors:
+    - family-names: devkyato
+      affiliation: "MATA Company"
+  version: 0.2.1

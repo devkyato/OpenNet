@@ -5,6 +5,13 @@ All notable changes are documented here. OpenNet follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-09
+
+### Changed
+
+- Add Zenodo and Citation File Format metadata for archival citation.
+- Refresh release-facing metadata across the Python and Arduino packages.
+
 ## [0.2.0] - 2026-07-29
 
 ### Added
@@ -97,7 +104,8 @@ All notable changes are documented here. OpenNet follows
 - Arduino IDE, PlatformIO, and Python examples.
 - Cross-platform tests, CI, packaging, and contributor documentation.
 
-[Unreleased]: https://github.com/devkyato/OpenNet/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/devkyato/OpenNet/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/devkyato/OpenNet/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/devkyato/OpenNet/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/devkyato/OpenNet/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/devkyato/OpenNet/releases/tag/v0.1.0

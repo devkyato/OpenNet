@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opennet-protocol"
-version = "0.2.0"
+version = "0.2.1"
 description = "Dependency-free typed ONP/1 messaging for Raspberry Pi, ESP32, and backend systems"
 readme = "README.md"
 requires-python = ">=3.9"
