@@ -2,18 +2,44 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata from this file."
 title: "OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends"
 authors:
-  - family-names: devkyato
+  - family-names: "@dev.mako (devkyato)"
     affiliation: "MATA Company"
-version: 0.2.1
+version: 0.2.2
+date-released: 2026-08-09
 license: MIT
 repository-code: "https://github.com/devkyato/OpenNet"
 url: "https://github.com/devkyato/OpenNet"
-abstract: "Typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends."
-keywords: [opennet, ONP/1, IoT, ESP32, Raspberry Pi, messaging, protocol, embedded, Arduino, Python]
+doi: 10.5281/zenodo.21853309
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21853309
+abstract: >-
+  OpenNet is a dependency-free Arduino and Python implementation of typed ONP/1 messaging for
+  direct links between ESP32 devices, Raspberry Pi systems, and backend services. Its inspectable
+  framing carries JSON, text, finite numeric values, booleans, null, and binary data over reliable
+  ordered streams. Bounded resources, CRC-32 checks, acknowledgement retries, duplicate
+  suppression, verified TLS support, and optional certificate-to-topic authorization make the
+  protocol suitable for teaching and focused embedded-to-host systems. OpenNet is alpha software:
+  it does not provide routing, discovery, durable queues, or brokered fleet management.
+keywords:
+  - OpenNet
+  - ONP/1
+  - Internet of Things
+  - ESP32
+  - Raspberry Pi
+  - embedded systems
+  - messaging protocol
+  - Arduino
+  - Python
+  - TCP
+  - TLS
 preferred-citation:
   type: software
   title: "OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends"
   authors:
-    - family-names: devkyato
+    - family-names: "@dev.mako (devkyato)"
       affiliation: "MATA Company"
-  version: 0.2.1
+  version: 0.2.2
+  doi: 10.5281/zenodo.21853309
+  date-released: 2026-08-09
+  repository-code: "https://github.com/devkyato/OpenNet"

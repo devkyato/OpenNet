@@ -5,6 +5,21 @@ All notable changes are documented here. OpenNet follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-09
+
+### Changed
+
+- Overhaul Zenodo, Citation File Format, README, and release-note presentation for publication
+  quality without changing ONP/1 or runtime behaviour.
+- Identify the creator consistently as `@dev.mako (devkyato)` of MATA Company while retaining
+  Cursor Agent only as a non-author Zenodo contributor.
+- Synchronize version 0.2.2 across Python, Arduino IDE, PlatformIO, archival, citation, and
+  documentation metadata.
+- Update current Python wheel, Arduino ZIP, Linux bundle, PlatformIO tag, and release-process
+  references to v0.2.2.
+- Expand practical output, status, limitations, security, documentation, citation, and
+  connected-project guidance.
+
 ## [0.2.1] - 2026-08-09
 
 ### Changed
@@ -104,7 +119,8 @@ All notable changes are documented here. OpenNet follows
 - Arduino IDE, PlatformIO, and Python examples.
 - Cross-platform tests, CI, packaging, and contributor documentation.
 
-[Unreleased]: https://github.com/devkyato/OpenNet/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/devkyato/OpenNet/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/devkyato/OpenNet/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/devkyato/OpenNet/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/devkyato/OpenNet/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/devkyato/OpenNet/compare/v0.1.0...v0.1.1
