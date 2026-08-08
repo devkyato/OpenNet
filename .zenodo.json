@@ -1,0 +1,21 @@
+{
+  "creators": [{"name": "devkyato", "affiliation": "MATA Company"}],
+  "contributors": [{"name": "Cursor Agent", "type": "Other"}],
+  "title": "OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends",
+  "description": "OpenNet is a dependency-free implementation of typed ONP/1 messaging for ESP32 devices, Raspberry Pi systems, and Python backends. It provides inspectable framing, bounded resource use, acknowledgement and retry support, and Arduino and Python implementations for direct reliable streams. Usage: install the Arduino library or Python package, connect a client and host over a trusted stream, then send typed application messages. Applications include classroom IoT systems, embedded telemetry links, Raspberry Pi gateways, and direct device-to-backend communication.",
+  "version": "0.2.1",
+  "keywords": ["opennet", "ONP/1", "IoT", "ESP32", "Raspberry Pi", "messaging", "protocol", "embedded", "Arduino", "Python"],
+  "license": "mit",
+  "upload_type": "software",
+  "access_right": "open",
+  "language": "eng",
+  "related_identifiers": [
+    {"identifier": "https://github.com/devkyato/OpenNet", "relation": "isSupplementTo", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Datary", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/TapAuth", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Lowpack", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Relay", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Custom-Arduino-Libraries", "relation": "references", "resource_type": "software"},
+    {"identifier": "https://github.com/devkyato/Arduino-Programs-Guide", "relation": "references", "resource_type": "software"}
+  ]
+}
