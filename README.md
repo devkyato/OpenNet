@@ -143,6 +143,17 @@ unsafe action.
 - [ONP/1 protocol specification](docs/protocol.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Connected projects
+
+| Project | Role |
+| --- | --- |
+| **[Datary](https://github.com/devkyato/Datary)** | Local-first laboratory for reproducible program and simulation evidence |
+| **[Relay](https://github.com/devkyato/Relay)** | Timing-risk source review for control and firmware code |
+| **[TapAuth](https://github.com/devkyato/TapAuth)** | Raspberry Pi NFC attendance and reservation kiosk |
+| **[Lowpack](https://github.com/devkyato/Lowpack)** | Local-first, application-aware lossless packing |
+| **[Custom Arduino Libraries](https://github.com/devkyato/Custom-Arduino-Libraries)** | Non-blocking LED and digital-output patterns |
+| **[Arduino Programs Guide](https://github.com/devkyato/Arduino-Programs-Guide)** | Safety-first, compile-checked Arduino Uno course |
+
 Student contributions are welcome. Good changes include a reproducible test,
 clear documentation, or a complete compatibility report. OpenNet follows
 [Semantic Versioning](https://semver.org/) and is licensed under the
