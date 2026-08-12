@@ -4,8 +4,8 @@ title: "OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backe
 authors:
   - family-names: "@dev.mako (devkyato)"
     affiliation: "MATA Company"
-version: 0.2.2
-date-released: 2026-08-09
+version: 0.2.3
+date-released: 2026-08-12
 license: MIT
 repository-code: "https://github.com/devkyato/OpenNet"
 url: "https://github.com/devkyato/OpenNet"
@@ -39,7 +39,7 @@ preferred-citation:
   authors:
     - family-names: "@dev.mako (devkyato)"
       affiliation: "MATA Company"
-  version: 0.2.2
+  version: 0.2.3
   doi: 10.5281/zenodo.21853309
-  date-released: 2026-08-09
+  date-released: 2026-08-12
   repository-code: "https://github.com/devkyato/OpenNet"

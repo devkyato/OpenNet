@@ -5,6 +5,8 @@ All notable changes are documented here. OpenNet follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-08-12
+
 ### Added
 
 - Add `opennet doctor` for local version, default endpoint, and TLS readiness checks.

@@ -19,12 +19,12 @@ PyPI publication is intentionally not automatic until the owner configures trust
 publishing. Release assets remain installable and reproducible without a registry
 credential.
 
-## v0.2.2 assets
+## v0.2.3 assets
 
 | Asset | Use |
 |---|---|
-| `OpenNet-0.2.2.zip` | Arduino IDE library |
-| `opennet_protocol-0.2.2-py3-none-any.whl` | Direct pip/pipx install |
-| `opennet_protocol-0.2.2.tar.gz` | Python source distribution |
-| `OpenNet-linux-0.2.2.tar.gz` | `sudo` Linux/systemd install |
+| `OpenNet-0.2.3.zip` | Arduino IDE library |
+| `opennet_protocol-0.2.3-py3-none-any.whl` | Direct pip/pipx install |
+| `opennet_protocol-0.2.3.tar.gz` | Python source distribution |
+| `OpenNet-linux-0.2.3.tar.gz` | `sudo` Linux/systemd install |
 | `SHA256SUMS` | Artifact integrity verification |

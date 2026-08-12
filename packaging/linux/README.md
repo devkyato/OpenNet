@@ -4,15 +4,15 @@ This bundle installs a dedicated, unprivileged `opennet` service under
 `/opt/opennet` and keeps its settings in `/etc/opennet/opennet.env`.
 
 ```sh
-tar -xzf OpenNet-linux-0.2.2.tar.gz
-cd OpenNet-linux-0.2.2
+tar -xzf OpenNet-linux-0.2.3.tar.gz
+cd OpenNet-linux-0.2.3
 sudo ./install.sh
 ```
 
 The default listener is loopback-only. Read the
-[security guide](https://github.com/devkyato/OpenNet/blob/v0.2.2/docs/security.md)
+[security guide](https://github.com/devkyato/OpenNet/blob/v0.2.3/docs/security.md)
 before exposing it to a network. The complete
-[service/TLS guide](https://github.com/devkyato/OpenNet/blob/v0.2.2/docs/linux-service.md)
+[service/TLS guide](https://github.com/devkyato/OpenNet/blob/v0.2.3/docs/linux-service.md)
 shows a hardened remote setup. Use `sudo ./install.sh --no-start` to inspect or
 customize the unit before it starts.
 
