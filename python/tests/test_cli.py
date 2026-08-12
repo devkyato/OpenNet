@@ -31,7 +31,7 @@ def test_cli_value_conversion(kind, text, expected):
 
 def test_cli_has_operational_subcommands():
     parser = build_parser()
-    for command in ("serve", "send", "ping", "benchmark"):
+    for command in ("serve", "send", "ping", "benchmark", "doctor"):
         with pytest.raises(SystemExit) as result:
             parser.parse_args((command, "--help"))
         assert result.value.code == 0

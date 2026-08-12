@@ -49,7 +49,7 @@ def _add_connection_options(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="opennet",
-        description="Send, serve, diagnose, and benchmark ONP/1 connections",
+        description="Send, serve, doctor, and benchmark ONP/1 connections",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -115,6 +115,11 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--payload-size", type=int, default=64)
     benchmark.add_argument("--retries", type=int, default=1)
     benchmark.add_argument("--json", action="store_true", dest="json_output")
+
+    commands.add_parser(
+        "doctor",
+        help="report local OpenNet version, defaults, and TLS readiness",
+    )
 
     return parser
 
@@ -367,6 +372,28 @@ async def _benchmark(args: argparse.Namespace) -> None:
             print(f"{key}: {value}")
 
 
+def _doctor() -> None:
+    failures: list[str] = []
+    print(f"OpenNet version: {__version__}")
+    print(f"Python: {sys.version.split()[0]}")
+    print(f"Default host: {DEFAULT_HOST}")
+    print(f"Default port: {DEFAULT_PORT}")
+    print(f"Default max payload: {DEFAULT_MAX_PAYLOAD}")
+    print(f"TLS module: {ssl.OPENSSL_VERSION}")
+    if not _is_loopback(DEFAULT_HOST):
+        print(
+            "Default host is not loopback; plaintext listeners require "
+            "--allow-plaintext or TLS"
+        )
+    else:
+        print("Default host is loopback [ok for local plaintext]")
+    if sys.version_info < (3, 9):
+        failures.append("Python 3.9 or newer is required")
+    if failures:
+        raise ValueError("; ".join(failures))
+    print("Doctor checks passed")
+
+
 async def run(args: argparse.Namespace) -> None:
     if args.command == "serve":
         await _serve(args)
@@ -376,6 +403,8 @@ async def run(args: argparse.Namespace) -> None:
         await _ping(args)
     elif args.command == "benchmark":
         await _benchmark(args)
+    elif args.command == "doctor":
+        _doctor()
     else:
         raise AssertionError(f"unknown command {args.command}")
 

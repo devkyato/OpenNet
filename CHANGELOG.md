@@ -5,6 +5,14 @@ All notable changes are documented here. OpenNet follows
 
 ## [Unreleased]
 
+### Added
+
+- Add `opennet doctor` for local version, default endpoint, and TLS readiness checks.
+
+### Fixed
+
+- Align the Linux service bundle README with the 0.2.2 archive name and documentation tags.
+
 ## [0.2.2] - 2026-08-09
 
 ### Changed
