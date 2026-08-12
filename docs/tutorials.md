@@ -2,13 +2,13 @@
 
 ## 1. Local Python round trip
 
-Install the v0.2.2 wheel directly from the GitHub release:
+Install the v0.2.3 wheel directly from the GitHub release:
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install \
-  https://github.com/devkyato/OpenNet/releases/download/v0.2.2/opennet_protocol-0.2.2-py3-none-any.whl
+  https://github.com/devkyato/OpenNet/releases/download/v0.2.3/opennet_protocol-0.2.3-py3-none-any.whl
 ```
 
 Terminal one:
@@ -27,7 +27,7 @@ opennet send device/state '{"online":true,"battery":91}' --type json
 
 ## 2. Raspberry Pi service
 
-Download and extract `OpenNet-linux-0.2.2.tar.gz`, then:
+Download and extract `OpenNet-linux-0.2.3.tar.gz`, then:
 
 ```sh
 sudo ./install.sh
@@ -40,7 +40,7 @@ TLS before the first start. See [Security](security.md).
 
 ## 3. ESP32 over a trusted development LAN
 
-1. Install `OpenNet-0.2.2.zip` through Arduino IDE's **Add .ZIP Library**.
+1. Install `OpenNet-0.2.3.zip` through Arduino IDE's **Add .ZIP Library**.
 2. Open **File > Examples > OpenNet > TelemetryClient**.
 3. Enter the Wi-Fi details and the server's LAN address.
 4. Start a development server with

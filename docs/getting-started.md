@@ -18,7 +18,7 @@ supported Python version.
 
 ```bash
 python -m pip install \
-  https://github.com/devkyato/OpenNet/releases/download/v0.2.2/opennet_protocol-0.2.2-py3-none-any.whl
+  https://github.com/devkyato/OpenNet/releases/download/v0.2.3/opennet_protocol-0.2.3-py3-none-any.whl
 opennet serve
 ```
 
@@ -52,7 +52,7 @@ For another project:
 
 ```ini
 lib_deps =
-  https://github.com/devkyato/OpenNet.git#v0.2.2
+  https://github.com/devkyato/OpenNet.git#v0.2.3
 ```
 
 ## Sending values

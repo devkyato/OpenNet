@@ -15,7 +15,7 @@ communication layer or a replacement for MQTT, HTTP, or WebSocket. It sends
 JSON, text, signed integers, finite doubles, booleans, null, and arbitrary binary
 data over TCP/TLS or another reliable ordered stream.
 
-Version 0.2.2 is an alpha release for real projects and learning. This release
+Version 0.2.3 is an alpha release for real projects and learning. This release
 improves publication, documentation, and citation quality without claiming new
 protocol or runtime behaviour. OpenNet has a
 documented wire format, bounded resource use, retries and duplicate suppression,
@@ -59,7 +59,7 @@ Python wheel from the release page:
 
 ```sh
 python -m pip install \
-  https://github.com/devkyato/OpenNet/releases/download/v0.2.2/opennet_protocol-0.2.2-py3-none-any.whl
+  https://github.com/devkyato/OpenNet/releases/download/v0.2.3/opennet_protocol-0.2.3-py3-none-any.whl
 opennet --version
 ```
 
@@ -67,15 +67,15 @@ For an isolated command:
 
 ```sh
 pipx install \
-  https://github.com/devkyato/OpenNet/releases/download/v0.2.2/opennet_protocol-0.2.2-py3-none-any.whl
+  https://github.com/devkyato/OpenNet/releases/download/v0.2.3/opennet_protocol-0.2.3-py3-none-any.whl
 ```
 
-For Raspberry Pi/Linux, extract `OpenNet-linux-0.2.2.tar.gz` and run
+For Raspberry Pi/Linux, extract `OpenNet-linux-0.2.3.tar.gz` and run
 `sudo ./install.sh`. It creates a hardened, unprivileged systemd service with a
-loopback-only default. For Arduino IDE, install `OpenNet-0.2.2.zip` through
+loopback-only default. For Arduino IDE, install `OpenNet-0.2.3.zip` through
 **Sketch > Include Library > Add .ZIP Library**.
 
-The Python distribution is installable with pip, but v0.2.2 is distributed from
+The Python distribution is installable with pip, but v0.2.3 is distributed from
 GitHub Releases rather than the public PyPI index.
 
 ## Five-minute local test
@@ -158,7 +158,7 @@ unsafe action.
 If you use this software in research or teaching, please cite the Zenodo archive / this repository:
 
 ```text
-@dev.mako (devkyato). (2026). OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends (Version 0.2.2). https://github.com/devkyato/OpenNet
+@dev.mako (devkyato). (2026). OpenNet: typed ONP/1 messaging for ESP32, Raspberry Pi, and Python backends (Version 0.2.3). https://github.com/devkyato/OpenNet
 ```
 
 See [CITATION.cff](CITATION.cff) for machine-readable metadata.
